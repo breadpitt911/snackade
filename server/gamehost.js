@@ -1,0 +1,61 @@
+// The games origin: serves built-in and uploaded games from a different origin
+// than the site, with headers that Unity / WebAssembly builds need, and injects
+// the small Snackade SDK into every HTML page so games can report scores.
+import fs from 'node:fs';
+import path from 'node:path';
+import express from 'express';
+import { config, storageDir } from './config.js';
+
+const ENCODED = { '.br': 'br', '.gz': 'gzip' };
+const TYPES = {
+  '.wasm': 'application/wasm', '.js': 'application/javascript', '.mjs': 'application/javascript',
+  '.data': 'application/octet-stream', '.json': 'application/json', '.unityweb': 'application/octet-stream',
+  '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.pck': 'application/octet-stream',
+};
+
+function setHeaders(res, file) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  let ext = path.extname(file).toLowerCase();
+  if (ENCODED[ext]) {
+    res.setHeader('Content-Encoding', ENCODED[ext]);
+    ext = path.extname(file.slice(0, -ext.length)).toLowerCase();
+  }
+  if (TYPES[ext]) res.setHeader('Content-Type', TYPES[ext]);
+}
+
+const sdkSource = () => fs.readFileSync(path.join(config.root, 'sdk', 'snackade-sdk.js'), 'utf8')
+  .replace('__SITE_ORIGIN__', config.siteOrigin);
+
+function htmlWithSdk(root) {
+  return (req, res, next) => {
+    const rel = decodeURIComponent(req.path);
+    if (!/\.html?$/i.test(rel)) return next();
+    const file = path.resolve(root, '.' + rel);
+    if (!file.startsWith(path.resolve(root) + path.sep) || !fs.existsSync(file)) return next();
+    let html = fs.readFileSync(file, 'utf8');
+    const tag = '<script src="/sdk.js"></script>';
+    html = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + tag) : tag + html;
+    setHeaders(res, file);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(html);
+  };
+}
+
+export function createGameHost() {
+  const app = express();
+  app.disable('x-powered-by');
+  app.get('/sdk.js', (_req, res) => { res.type('application/javascript').set('Access-Control-Allow-Origin', '*').send(sdkSource()); });
+
+  for (const [prefix, root] of [['/builtin', config.builtinGamesDir], ['/g', storageDir]]) {
+    app.use(`${prefix}/:slug`, (req, res, next) => {
+      if (!/^[a-z0-9-]+$/.test(req.params.slug)) return res.sendStatus(404);
+      const dir = path.join(root, req.params.slug);
+      htmlWithSdk(dir)(req, res, () => express.static(dir, { setHeaders, maxAge: '1h', fallthrough: true })(req, res, next));
+    });
+  }
+  app.get('/', (_req, res) => res.redirect(config.siteOrigin));
+  app.use((_req, res) => res.status(404).type('text').send('Not found'));
+  return app;
+}

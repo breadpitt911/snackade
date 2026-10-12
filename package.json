@@ -1,0 +1,22 @@
+{
+  "name": "snackade",
+  "version": "0.1.0",
+  "description": "Bite-sized browser games, with XP for playing and making them.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "node --disable-warning=ExperimentalWarning --watch server/index.js",
+    "import-github": "node --disable-warning=ExperimentalWarning scripts/import-github.js"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "adm-zip": "^0.6.1",
+    "express": "^4.22.3",
+    "multer": "^1.4.4"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "private": true
+}

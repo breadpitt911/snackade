@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true">
+  <defs><mask id="bite1"><rect width="48" height="48" fill="#fff"/><circle cx="41.5" cy="7" r="6.5" fill="#000"/><circle cx="34" cy="3.5" r="4.6" fill="#000"/></mask>
+  <clipPath id="bc2"><rect x="7" y="5" width="34" height="39" rx="6"/></clipPath></defs>
+  <rect x="9.5" y="8" width="34" height="39" rx="6" fill="#15131F" mask="url(#bite1)"/>
+  <g mask="url(#bite1)"><rect x="7" y="5" width="34" height="39" rx="6" fill="#3346FF" stroke="#15131F" stroke-width="3"/>
+  <rect x="12" y="11" width="24" height="17" rx="3.5" fill="#FFD23F" stroke="#15131F" stroke-width="2.5"/></g>
+  <g clip-path="url(#bc2)" fill="none" stroke="#15131F" stroke-width="3"><circle cx="41.5" cy="7" r="6.5"/><circle cx="34" cy="3.5" r="4.6"/></g>
+  <circle cx="19" cy="18.5" r="2.3" fill="#15131F"/><circle cx="28" cy="18.5" r="2.3" fill="#15131F"/>
+  <path d="M19.5 22.5q4 3.4 8 0" fill="none" stroke="#15131F" stroke-width="2.3" stroke-linecap="round"/>
+  <g stroke="#15131F" stroke-width="2.3" stroke-linecap="round"><path d="M14 34v5M19 34v5M24 34v5M29 34v5M34 34v5"/></g>
+  </svg>
