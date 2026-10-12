@@ -31,7 +31,7 @@ export function apiUpload(path, form, onProgress) {
       if (d.events?.length) celebrate(d.events);
       resolve(d);
     };
-    x.onerror = () => reject(new Error("Couldn't reach the server. Check your connection and try again."));
+    x.onerror = () => reject(new Error("Couldn't reach the server. Check your connection and give it another go."));
     x.send(form);
   });
 }
@@ -60,7 +60,7 @@ document.addEventListener('click', e => {
 addEventListener('popstate', () => router?.());
 
 export function requireLogin(reason) {
-  toast(reason || 'Sign in to keep your XP.', { pip: '🔑' });
+  toast(reason || 'Sign in so your XP actually counts.', { pip: '🔑' });
   go('/login?next=' + encodeURIComponent(location.pathname + location.search));
 }
 
@@ -81,7 +81,7 @@ export function ago(ts) {
   for (const [sec, name] of units) if (s >= sec) { const v = Math.floor(s / sec); return `${v} ${name}${v > 1 ? 's' : ''} ago`; }
 }
 export const avatarHtml = (u, size) => avatar(u?.avatar || {}, size);
-export function title(t) { document.title = t ? `${t} · ${state.meta?.siteName || 'Snackade'}` : `${state.meta?.siteName || 'Snackade'} · bite-sized browser games`; }
+export function title(t) { document.title = t ? `${t} · ${state.meta?.siteName || 'Snackade'}` : `${state.meta?.siteName || 'Snackade'} · free games, right in your browser`; }
 
 // ---------- toasts ----------
 export function toast(text, { pip = '★', kind = '', ms = 3600 } = {}) {
@@ -114,7 +114,7 @@ export function celebrate(events) {
   let delay = 0;
   for (const e of events) {
     if (e.type === 'xp') setTimeout(() => toast(esc(e.label), { pip: `+${e.amount}` }), delay);
-    if (e.type === 'badge') setTimeout(() => toast(`Badge unlocked: <b>${esc(e.badge.name)}</b>`, { pip: '🏅', kind: 'badge', ms: 5000 }), delay);
+    if (e.type === 'badge') setTimeout(() => toast(`New badge: <b>${esc(e.badge.name)}</b>`, { pip: '🏅', kind: 'badge', ms: 5000 }), delay);
     delay += 350;
   }
   const lvl = events.filter(e => e.type === 'level').pop();
@@ -125,8 +125,8 @@ function levelUp({ level, title: t }) {
   modal(`<div class="levelup" style="display:grid;gap:10px;justify-items:center">
     ${levelRing(level, 100, 120).replace('class="ring"', 'class="ring medal"')}
     <div class="big">Level ${level}</div>
-    <p style="font-size:1.15rem">You're now a <b>${esc(t)}</b>.</p>
-    <button class="btn primary" data-close>Keep playing</button></div>`);
+    <p style="font-size:1.15rem">You're officially a <b>${esc(t)}</b>. Not bad at all.</p>
+    <button class="btn primary" data-close>Keep going</button></div>`);
   confetti();
 }
 function confetti() {

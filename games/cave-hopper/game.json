@@ -1,9 +1,14 @@
 {
   "title": "Cave Hopper",
-  "description": "One button, one tiny bumble-bot, one very long cave. Hold to buzz upward, let go to drop, and thread the gaps as the tunnel narrows and speeds up. Grab glowing crystals for bonus points.",
-  "instructions": "Hold mouse, Space or touch to rise. Release to fall. Don't touch the walls.",
+  "description": "One button, one tiny bumble-bot, one cave that never ends. Hold to buzz up, let go to drop, and squeeze through the gaps as the tunnel gets tighter and faster. Crystals are worth bonus points if you're brave enough to go for them.",
+  "instructions": "Hold the mouse, Space or your finger to fly up. Let go to drop. Touch a wall and it's over.",
   "category": "casual",
-  "tags": ["one-button", "endless", "flying", "quick"],
+  "tags": [
+    "one-button",
+    "endless",
+    "flying",
+    "quick"
+  ],
   "aspect": "16:9",
   "accent": "#ff5a36",
   "seed": 37,

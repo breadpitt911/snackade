@@ -1,9 +1,14 @@
 {
   "title": "Gobble Grid",
-  "description": "Nib is starving and the garden is full of seeds. Clear every row before the Glooms catch you, grab a chili to turn the tables, and slip through the side tunnels when it gets tight. Every board clear speeds things up.",
-  "instructions": "Arrow keys or WASD to steer (swipe on touch). Eat every seed to clear the board. Chilis make Glooms edible for a few seconds. P to pause, M to mute.",
+  "description": "Nib's starving and the garden's full of seeds. Eat every last one before the Glooms catch you. Grab a chili and suddenly they're the ones running. Side tunnels help when it gets tight, and every board you clear gets a bit faster.",
+  "instructions": "Arrow keys or WASD to move (swipe on a phone). Clear every seed to win the board. Chilis make the Glooms edible for a few seconds. P pauses, M mutes.",
   "category": "arcade",
-  "tags": ["maze", "retro", "chase", "classic"],
+  "tags": [
+    "maze",
+    "retro",
+    "chase",
+    "classic"
+  ],
   "aspect": "4:3",
   "accent": "#ffc93c",
   "seed": 11,

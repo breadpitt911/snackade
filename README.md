@@ -44,7 +44,7 @@ The importer looks for `index.html` in the repo root, `dist/`, `build/`, `docs/`
 | Unity WebGL | The zipped WebGL build folder | Brotli/Gzip files get the right `Content-Encoding`; a loader page is generated if `index.html` is missing (2020+ and legacy `UnityLoader` builds) |
 | Hosted URL | An `https://` link | The other site must allow framing |
 
-Limits live in `server/config.js` (300 MB zips, 800 MB unzipped, 8,000 files).
+Limits live in `server/config.js`: 95 MB uploads by default (`MAX_UPLOAD_MB`, kept under Cloudflare's 100 MB free-plan cap), 800 MB unzipped, 8,000 files.
 
 ## Leaderboards from inside a game
 
@@ -66,6 +66,10 @@ All in `server/xp.js`: the `RULES` table, the level curve (`xpToReach(level) = 5
 
 ## Deploying
 
+**Free hosting on Oracle Cloud + Cloudflare: follow [DEPLOY.md](DEPLOY.md).** It's a step-by-step guide with a one-command setup script.
+
+The general idea, for any host:
+
 The one hard requirement is **two hostnames**: one for the site, one for games, e.g. `snackade.com` and `play.snackade.com`. That separation is what keeps uploaded games from acting as the logged-in player.
 
 ```bash
@@ -77,7 +81,7 @@ DATA_DIR=/var/lib/snackade \
 npm start
 ```
 
-With `GAMES_PORT` equal to `PORT`, one process answers both hostnames (it routes by `Host` header). Point both domains at it behind a TLS proxy (Caddy, nginx, a PaaS). Or keep two ports and route each domain to its own port.
+With `GAMES_PORT` equal to `PORT`, one process answers both hostnames (it routes by `Host` header). Point both domains at it behind a TLS proxy (Cloudflare Tunnel, Caddy, nginx, a PaaS). Or keep two ports and route each domain to its own port.
 
 `DATA_DIR` holds the SQLite database, uploaded games and covers. Put it on a persistent volume and back it up. A `Dockerfile` is included:
 
@@ -91,6 +95,7 @@ docker run -p 8080:8080 -v snackade-data:/data \
 
 | Variable | Default | |
 |---|---|---|
+| `HOST` | 0.0.0.0 | Address to listen on (`127.0.0.1` behind a tunnel or proxy on the same machine) |
 | `PORT` | 8080 | Site port |
 | `GAMES_PORT` | 8081 | Games port (set equal to `PORT` for single-port mode) |
 | `SITE_ORIGIN` | `http://localhost:8080` | Public URL of the site |
@@ -99,6 +104,7 @@ docker run -p 8080:8080 -v snackade-data:/data \
 | `ADMIN_USERNAMES` | | Comma-separated admin usernames (the first account is always admin) |
 | `GITHUB_TOKEN` | | For private repos / higher rate limits on imports |
 | `SITE_NAME` | Snackade | Rename the site |
+| `MAX_UPLOAD_MB` | 95 | Biggest upload accepted |
 | `NODE_ENV` | | `production` enables secure cookies |
 
 ## Project layout

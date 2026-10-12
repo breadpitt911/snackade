@@ -4,14 +4,14 @@ import express from 'express';
 import multer from 'multer';
 import { config, coversDir } from './config.js';
 import { one, all, run, tx, now, today } from './db.js';
-import { hashPassword, verifyPassword, createSession, destroySession, requireUser, rateLimit } from './auth.js';
+import { hashPassword, verifyPassword, createSession, destroySession, requireUser, rateLimit, clientIp, PASSWORD_MAX } from './auth.js';
 import { RULES, LEVELS, BADGES, award, checkBadges, touchStreak, progress, forUser } from './xp.js';
 import { processUpload, uniqueSlug, removeGameFiles, CATEGORIES, KINDS, UploadError } from './uploads.js';
 
 export const api = express.Router();
 const wrap = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 const bad = (res, msg, code = 400) => res.status(code).json({ error: msg });
-const ip = req => req.ip || 'x';
+const ip = clientIp;
 
 // ---------- serializers ----------
 const parseAvatar = s => { try { return JSON.parse(s); } catch { return {}; } };
@@ -57,13 +57,14 @@ api.get('/me', (req, res) => {
 });
 
 api.post('/auth/signup', (req, res) => {
-  if (!rateLimit('auth:' + ip(req), 20, 600e3)) return bad(res, 'Too many attempts. Try again in a few minutes.', 429);
+  if (!rateLimit('auth:' + ip(req), 20, 600e3)) return bad(res, 'Easy there, too many tries. Give it a few minutes.', 429);
   const username = String(req.body.username || '').trim();
   const password = String(req.body.password || '');
   const displayName = String(req.body.displayName || username).trim().slice(0, 32);
-  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return bad(res, 'Usernames are 3–20 letters, numbers or underscores.');
-  if (password.length < 8) return bad(res, 'Passwords need at least 8 characters.');
-  if (one('SELECT 1 FROM users WHERE username=?', username)) return bad(res, 'That username is taken.');
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return bad(res, 'Usernames need 3–20 letters, numbers or underscores.');
+  if (password.length < 8) return bad(res, 'Password needs at least 8 characters.');
+  if (password.length > PASSWORD_MAX) return bad(res, `Password's too long (max ${PASSWORD_MAX}).`);
+  if (one('SELECT 1 FROM users WHERE username=?', username)) return bad(res, "That username's taken. Try another.");
   const isFirst = !one('SELECT 1 FROM users LIMIT 1');
   const isAdmin = isFirst || config.admins.includes(username.toLowerCase()) ? 1 : 0;
   const avatar = JSON.stringify(req.body.avatar && typeof req.body.avatar === 'object' ? sanitizeAvatar(req.body.avatar) : randomAvatar());
@@ -75,9 +76,11 @@ api.post('/auth/signup', (req, res) => {
 });
 
 api.post('/auth/login', (req, res) => {
-  if (!rateLimit('auth:' + ip(req), 20, 600e3)) return bad(res, 'Too many attempts. Try again in a few minutes.', 429);
+  if (!rateLimit('auth:' + ip(req), 20, 600e3)) return bad(res, 'Easy there, too many tries. Give it a few minutes.', 429);
+  const password = String(req.body.password || '');
+  if (password.length > PASSWORD_MAX) return bad(res, "Wrong username or password.", 401);
   const u = one('SELECT * FROM users WHERE username=?', String(req.body.username || '').trim());
-  if (!u || !verifyPassword(String(req.body.password || ''), u.pass_hash)) return bad(res, "That username and password don't match.", 401);
+  if (!u || !verifyPassword(password, u.pass_hash)) return bad(res, 'Wrong username or password.', 401);
   createSession(res, u.id);
   const events = touchStreak(u.id);
   res.json(meResponse(one('SELECT * FROM users WHERE id=?', u.id), events));
@@ -128,8 +131,8 @@ api.get('/games', (req, res) => {
   if (req.query.source === 'community') where.push('g.author_id IS NOT NULL');
   if (req.query.source === 'staff') where.push('g.author_id IS NULL');
   const order = { popular: 'g.plays DESC', loved: 'g.likes DESC', az: 'g.title COLLATE NOCASE ASC' }[req.query.sort] || 'g.created_at DESC';
-  const limit = Math.min(60, Math.max(1, Number(req.query.limit) || 36));
-  const offset = Math.max(0, Number(req.query.offset) || 0);
+  const limit = Math.min(60, Math.max(1, Math.floor(Number(req.query.limit)) || 36));
+  const offset = Math.min(1e6, Math.max(0, Math.floor(Number(req.query.offset)) || 0));
   const games = listGames(where.join(' AND '), order, `${limit} OFFSET ${offset}`, ...p);
   const total = one(`SELECT COUNT(*) n FROM games g WHERE g.status='live' ${where.length ? 'AND ' + where.join(' AND ') : ''}`, ...p).n;
   res.json({ games, total });
@@ -150,7 +153,7 @@ function leaderboard(gameId, limit = 10) {
 
 api.get('/games/:slug', (req, res) => {
   const g = findGame(req.params.slug, req.user);
-  if (!g) return bad(res, 'Game not found.', 404);
+  if (!g) return bad(res, "Can't find that game.", 404)
   const liked = req.user ? !!one('SELECT 1 FROM likes WHERE user_id=? AND game_id=?', req.user.id, g.id) : false;
   const best = req.user ? one('SELECT MAX(score) s FROM scores WHERE user_id=? AND game_id=?', req.user.id, g.id).s : null;
   res.json({
@@ -163,7 +166,7 @@ api.get('/games/:slug', (req, res) => {
 
 api.post('/games/:slug/play', (req, res) => {
   const g = findGame(req.params.slug, req.user);
-  if (!g) return bad(res, 'Game not found.', 404);
+  if (!g) return bad(res, "Can't find that game.", 404)
   if (!rateLimit(`play:${ip(req)}:${g.id}`, 6, 60e3)) return res.json({ plays: g.plays, events: [] });
   const events = [], d = today(), uid = req.user?.id || null;
   tx(() => {
@@ -184,7 +187,7 @@ api.post('/games/:slug/play', (req, res) => {
 
 api.post('/games/:slug/like', requireUser, (req, res) => {
   const g = findGame(req.params.slug, req.user);
-  if (!g) return bad(res, 'Game not found.', 404);
+  if (!g) return bad(res, "Can't find that game.", 404)
   const uid = req.user.id, events = [];
   const liked = tx(() => {
     if (one('SELECT 1 FROM likes WHERE user_id=? AND game_id=?', uid, g.id)) {
@@ -209,11 +212,11 @@ api.post('/games/:slug/like', requireUser, (req, res) => {
 // client-reported, so treat leaderboards as "for fun" until games are verified.
 api.post('/games/:slug/score', requireUser, (req, res) => {
   const g = findGame(req.params.slug, req.user);
-  if (!g) return bad(res, 'Game not found.', 404);
+  if (!g) return bad(res, "Can't find that game.", 404)
   const score = Math.floor(Number(req.body.score));
-  if (!Number.isFinite(score) || score < 0 || score > 1e9) return bad(res, 'Invalid score.');
+  if (!Number.isFinite(score) || score < 0 || score > 1e9) return bad(res, "That score doesn't look right.");
   const uid = req.user.id;
-  if (!rateLimit(`score:${uid}:${g.id}`, 20, 60e3)) return bad(res, 'Slow down a little.', 429);
+  if (!rateLimit(`score:${uid}:${g.id}`, 20, 60e3)) return bad(res, 'Whoa, slow down a sec.', 429);
   const events = [], d = today();
   const result = tx(() => {
     const prevBest = one('SELECT MAX(score) s FROM scores WHERE user_id=? AND game_id=?', uid, g.id).s;
@@ -231,7 +234,20 @@ api.post('/games/:slug/score', requireUser, (req, res) => {
 });
 
 // ---------- upload ----------
+// Checked *before* multer reads the body, so nobody can stream endless huge uploads at us.
+let activeUploads = 0;
+function uploadGate(req, res, next) {
+  if (!rateLimit('upload:' + req.user.id, 10, 3600e3)) return bad(res, "That's 10 uploads this hour. Take a breather and try again later.", 429);
+  if (activeUploads >= 3) return bad(res, 'The server is busy unpacking other games. Try again in a minute.', 503);
+  activeUploads++;
+  let done = false;
+  const release = () => { if (!done) { done = true; activeUploads--; } };
+  res.on('close', release);
+  next();
+}
+const removeCover = (name) => { if (name && /^[a-z0-9-]+\.(png|jpg|gif|webp)$/.test(name)) fs.rmSync(path.join(coversDir, name), { force: true }); };
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.limits.zip, files: 2, fields: 20 } });
+const coverUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.limits.cover, files: 1, fields: 20 } });
 const IMG_TYPES = [[[0x89, 0x50, 0x4e, 0x47], 'png'], [[0xff, 0xd8, 0xff], 'jpg'], [[0x47, 0x49, 0x46], 'gif'], [[0x52, 0x49, 0x46, 0x46], 'webp']];
 const sniffImage = buf => IMG_TYPES.find(([sig]) => sig.every((b, i) => buf[i] === b))?.[1];
 
@@ -239,7 +255,7 @@ function readGameFields(body, partial = false) {
   const out = {};
   if (!partial || body.title != null) {
     out.title = String(body.title || '').trim().slice(0, 60);
-    if (out.title.length < 2) throw new UploadError('Give your game a title.');
+    if (out.title.length < 2) throw new UploadError('Your game needs a title.');
   }
   if (!partial || body.description != null) out.description = String(body.description || '').trim().slice(0, 1200);
   if (!partial || body.instructions != null) out.instructions = String(body.instructions || '').trim().slice(0, 600);
@@ -255,46 +271,47 @@ function readGameFields(body, partial = false) {
 
 function saveCover(file, slug) {
   if (!file) return null;
-  if (file.size > config.limits.cover) throw new UploadError('Cover images must be under 3 MB.');
+  if (file.size > config.limits.cover) throw new UploadError('Cover image needs to be under 3 MB.');
   const ext = sniffImage(file.buffer);
-  if (!ext) throw new UploadError('Covers must be PNG, JPG, GIF or WebP.');
+  if (!ext) throw new UploadError('Cover has to be a PNG, JPG, GIF or WebP.');
   const name = `${slug}-${Date.now().toString(36)}.${ext}`;
   fs.writeFileSync(path.join(coversDir, name), file.buffer);
   return name;
 }
 
-api.post('/upload', requireUser, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'cover', maxCount: 1 }]), wrap(async (req, res) => {
-  if (!rateLimit('upload:' + req.user.id, 10, 3600e3)) return bad(res, 'Upload limit reached — try again in an hour.', 429);
+api.post('/upload', requireUser, uploadGate, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'cover', maxCount: 1 }]), wrap(async (req, res) => {
   const fields = readGameFields(req.body);
   const kind = String(req.body.kind || '');
   const file = req.files?.file?.[0];
-  if (kind === 'html' && file && file.size > config.limits.htmlFile) throw new UploadError('Single-file games must be under 15 MB.');
+  if (kind === 'html' && file && file.size > config.limits.htmlFile) throw new UploadError('Single-file games max out at 15 MB.');
   const slug = uniqueSlug(fields.title);
   const result = await processUpload({ kind, slug, file, repoUrl: req.body.repoUrl, branch: req.body.branch, subdir: req.body.subdir, embedUrl: req.body.embedUrl });
-  let cover = null;
+  let cover = null, gameId;
   try { cover = saveCover(req.files?.cover?.[0], slug); } catch (e) { removeGameFiles(slug); throw e; }
   const t = now(), events = [];
-  const gameId = tx(() => {
+  try {
+    gameId = tx(() => {
     const { lastInsertRowid } = run(`INSERT INTO games (slug, title, description, instructions, category, tags, kind, entry, source_url, cover, cover_seed, accent, author_id, aspect, size_bytes, created_at, updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       slug, fields.title, fields.description, fields.instructions, fields.category, fields.tags, result.kind, result.entry, result.sourceUrl,
       cover, Math.floor(Math.random() * 1e6), null, req.user.id, fields.aspect, result.sizeBytes, t, t);
-    award(req.user.id, 'upload', { dedupeKey: `upload:${lastInsertRowid}`, label: `Published ${fields.title}` }, events);
+    award(req.user.id, 'upload', { dedupeKey: `upload:${lastInsertRowid}`, label: `Put up ${fields.title}` }, events);
     checkBadges(req.user.id, events);
     return lastInsertRowid;
-  });
+  }); } catch (e) { removeGameFiles(slug); removeCover(cover); throw e; }
   const g = one(`${GAME_SELECT} WHERE g.id=?`, gameId);
   res.json({ game: publicGame(g), events: forUser(events, req.user.id) });
 }));
 
-api.patch('/games/:slug', requireUser, upload.single('cover'), (req, res) => {
+api.patch('/games/:slug', requireUser, coverUpload.single('cover'), (req, res) => {
   const g = findGame(req.params.slug, req.user);
-  if (!g || !canEdit(req.user, g)) return bad(res, 'Game not found.', 404);
+  if (!g || !canEdit(req.user, g)) return bad(res, "Can't find that game.", 404);
   const f = readGameFields(req.body, true);
   if (req.body.status && ['live', 'hidden'].includes(req.body.status)) f.status = req.body.status;
   if (req.user.is_admin && req.body.featured != null) f.featured = String(req.body.featured) === '1' || req.body.featured === true ? 1 : 0;
   if (req.file) f.cover = saveCover(req.file, g.slug);
   if (req.body.removeCover === '1') f.cover = null;
+  if ('cover' in f && g.cover && f.cover !== g.cover) removeCover(g.cover);
   const keys = Object.keys(f);
   if (keys.length) run(`UPDATE games SET ${keys.map(k => `${k}=?`).join(', ')}, updated_at=? WHERE id=?`, ...keys.map(k => f[k]), now(), g.id);
   res.json({ game: publicGame(one(`${GAME_SELECT} WHERE g.id=?`, g.id)) });
@@ -302,16 +319,17 @@ api.patch('/games/:slug', requireUser, upload.single('cover'), (req, res) => {
 
 api.delete('/games/:slug', requireUser, (req, res) => {
   const g = findGame(req.params.slug, req.user);
-  if (!g || !canEdit(req.user, g) || g.kind === 'builtin') return bad(res, 'Game not found.', 404);
+  if (!g || !canEdit(req.user, g) || g.kind === 'builtin') return bad(res, "Can't find that game.", 404);
   run('DELETE FROM games WHERE id=?', g.id);
   removeGameFiles(g.slug);
+  removeCover(g.cover);
   res.json({ ok: true });
 });
 
 // ---------- people ----------
 api.get('/users/:username', (req, res) => {
   const u = one('SELECT * FROM users WHERE username=?', req.params.username);
-  if (!u) return bad(res, 'Player not found.', 404);
+  if (!u) return bad(res, "No player with that name.", 404);
   const earned = Object.fromEntries(all('SELECT badge_id, earned_at FROM badges WHERE user_id=?', u.id).map(b => [b.badge_id, b.earned_at]));
   const isMe = req.user?.id === u.id;
   res.json({
@@ -341,7 +359,8 @@ api.get('/leaderboard', (_req, res) => {
 // ---------- errors ----------
 api.use((err, _req, res, _next) => {
   if (err instanceof UploadError) return bad(res, err.message);
-  if (err instanceof multer.MulterError) return bad(res, err.code === 'LIMIT_FILE_SIZE' ? `That file is too big (max ${config.limits.zip / 1048576} MB).` : err.message);
+  if (err instanceof multer.MulterError) return bad(res, err.code !== 'LIMIT_FILE_SIZE' ? 'That upload got mangled. Try again.'
+    : err.field === 'cover' ? 'Cover image needs to be under 3 MB.' : `That file's too big (max ${config.limits.zip / 1048576} MB).`);
   console.error(err);
-  bad(res, 'Something went wrong on our side.', 500);
+  bad(res, 'Something broke on our end. Try again in a bit.', 500);
 });

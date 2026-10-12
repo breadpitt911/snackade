@@ -10,6 +10,8 @@ export const config = {
   siteName: process.env.SITE_NAME || 'Snackade',
   root: ROOT,
   port: PORT,
+  // 127.0.0.1 when a tunnel/proxy on the same machine fronts the app (recommended), 0.0.0.0 in Docker.
+  host: process.env.HOST || '0.0.0.0',
   // Games are served from a *different origin* than the site so uploaded code can
   // never read the site's cookies or call its API as the logged-in player.
   // Dev: a second port. Production: a separate (sub)domain, e.g. https://play.example.com
@@ -24,7 +26,8 @@ export const config = {
   secureCookies: process.env.NODE_ENV === 'production',
   limits: {
     htmlFile: 15 * 1024 * 1024,       // single .html
-    zip: 300 * 1024 * 1024,           // zipped HTML5 / Unity builds
+    // Cloudflare's free plan rejects request bodies over 100 MB, so default just under that.
+    zip: Number(process.env.MAX_UPLOAD_MB || 95) * 1024 * 1024,   // zipped HTML5 / Unity builds
     unzipped: 800 * 1024 * 1024,
     entries: 8000,
     cover: 3 * 1024 * 1024,

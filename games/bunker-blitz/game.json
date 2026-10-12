@@ -1,9 +1,14 @@
 {
   "title": "Bunker Blitz",
-  "description": "A fast, old-school first-person shooter. Rogue security drones have taken over the bunker — clear each wave, grab ammo and med-packs, and see how deep you can last. Scouts are quick, Brutes soak up shots, and every wave brings more of them.",
-  "instructions": "Click to lock the mouse. WASD to move, mouse to aim, click or Space to fire, Shift to sprint. Arrow keys also turn. On touch: left thumb moves, right thumb turns, tap FIRE.",
+  "description": "Old-school, fast and a little bit sweaty. Rogue security drones have taken over the bunker and it's on you to clear them out, wave after wave. Scouts are quick, Brutes take a beating, and there's always more of them than last time. Grab ammo and med-packs where you can.",
+  "instructions": "Click the game to lock your mouse. WASD to move, mouse to aim, click or Space to shoot, Shift to sprint. Arrow keys turn too. On a phone: left thumb moves, right thumb looks, tap FIRE.",
   "category": "shooter",
-  "tags": ["fps", "retro", "waves", "3d"],
+  "tags": [
+    "fps",
+    "retro",
+    "waves",
+    "3d"
+  ],
   "aspect": "16:9",
   "accent": "#18c5a7",
   "seed": 23,

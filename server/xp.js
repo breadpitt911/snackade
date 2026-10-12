@@ -3,16 +3,16 @@
 import { db, one, all, run, now, today } from './db.js';
 
 export const RULES = {
-  upload:        { xp: 250, label: 'Published a game' },
+  upload:        { xp: 250, label: 'Put a game up' },
   play:          { xp: 10,  label: 'Played a game',            note: 'once per game per day, up to 15 games a day' },
   playReceived:  { xp: 4,   label: 'Someone played your game',  note: 'once per player per game per day' },
   like:          { xp: 2,   label: 'Liked a game',              note: 'once per game' },
   likeReceived:  { xp: 20,  label: 'Someone liked your game',   note: 'once per player per game' },
   score:         { xp: 5,   label: 'Posted a score',            note: 'once per game per day' },
-  personalBest:  { xp: 15,  label: 'Beat your personal best',   note: 'once per game per day' },
+  personalBest:  { xp: 15,  label: 'Beat your own best',        note: 'once per game per day' },
   topScore:      { xp: 50,  label: 'Took the #1 spot',          note: 'once per game per day' },
-  streak:        { xp: 15,  label: 'Daily streak',              note: '+15, rising by 10 each day up to +75' },
-  profile:       { xp: 50,  label: 'Finished your profile',     note: 'once' },
+  streak:        { xp: 15,  label: 'Came back the next day',    note: 'starts at +15, goes up 10 a day, maxes at +75' },
+  profile:       { xp: 50,  label: 'Wrote your bio',            note: 'once' },
 };
 
 // Total XP needed to *reach* a level. L2 = 100, L3 = 300, L5 = 1,000, L10 = 4,500, L20 = 19,000
@@ -47,14 +47,14 @@ export const BADGES = [
   { id: 'taste-tester', name: 'Taste Tester',   desc: 'Play 10 different games',             icon: 'plate',    check: u => count('SELECT COUNT(DISTINCT game_id) n FROM plays WHERE user_id=?', u) >= 10 },
   { id: 'maker',        name: 'Maker',          desc: 'Publish your first game',             icon: 'wrench',   check: u => count("SELECT COUNT(*) n FROM games WHERE author_id=? AND status='live'", u) >= 1 },
   { id: 'studio',       name: 'One-Person Studio', desc: 'Publish 5 games',                  icon: 'stack',    check: u => count("SELECT COUNT(*) n FROM games WHERE author_id=? AND status='live'", u) >= 5 },
-  { id: 'crowd',        name: 'Crowd Pleaser',  desc: 'Your games get 100 plays',            icon: 'crowd',    check: u => count('SELECT COALESCE(SUM(plays),0) n FROM games WHERE author_id=?', u) >= 100 },
-  { id: 'hearts',       name: 'Heartbreaker',   desc: 'Your games collect 25 likes',         icon: 'heart',    check: u => count('SELECT COALESCE(SUM(likes),0) n FROM games WHERE author_id=?', u) >= 25 },
-  { id: 'scorer',       name: 'On the Board',   desc: 'Post a score on any leaderboard',     icon: 'flag',     check: u => count('SELECT COUNT(*) n FROM scores WHERE user_id=?', u) >= 1 },
-  { id: 'champ',        name: 'Champ',          desc: 'Hold #1 on any game',                 icon: 'crown',    check: u => count(`SELECT COUNT(*) n FROM (SELECT game_id, user_id FROM scores s WHERE score = (SELECT MAX(score) FROM scores WHERE game_id=s.game_id)) WHERE user_id=?`, u) >= 1 },
-  { id: 'streak-7',     name: 'Week Streak',    desc: 'Show up 7 days in a row',             icon: 'flame',    check: u => one('SELECT streak FROM users WHERE id=?', u).streak >= 7 },
+  { id: 'crowd',        name: 'Crowd Pleaser',  desc: 'Get 100 plays on your games',            icon: 'crowd',    check: u => count('SELECT COALESCE(SUM(plays),0) n FROM games WHERE author_id=?', u) >= 100 },
+  { id: 'hearts',       name: 'Heartbreaker',   desc: 'Get 25 likes on your games',         icon: 'heart',    check: u => count('SELECT COALESCE(SUM(likes),0) n FROM games WHERE author_id=?', u) >= 25 },
+  { id: 'scorer',       name: 'On the Board',   desc: 'Get on any leaderboard',     icon: 'flag',     check: u => count('SELECT COUNT(*) n FROM scores WHERE user_id=?', u) >= 1 },
+  { id: 'champ',        name: 'Champ',          desc: 'Be #1 on any game',                 icon: 'crown',    check: u => count(`SELECT COUNT(*) n FROM (SELECT game_id, user_id FROM scores s WHERE score = (SELECT MAX(score) FROM scores WHERE game_id=s.game_id)) WHERE user_id=?`, u) >= 1 },
+  { id: 'streak-7',     name: 'Week Streak',    desc: 'Come back 7 days in a row',             icon: 'flame',    check: u => one('SELECT streak FROM users WHERE id=?', u).streak >= 7 },
   { id: 'level-5',      name: 'Regular',        desc: 'Reach level 5',                       icon: 'star',     check: u => one('SELECT level FROM users WHERE id=?', u).level >= 5 },
   { id: 'level-10',     name: 'Veteran',        desc: 'Reach level 10',                      icon: 'bolt',     check: u => one('SELECT level FROM users WHERE id=?', u).level >= 10 },
-  { id: 'founder',      name: 'Early Snacker',  desc: 'One of the first 100 players',        icon: 'cake',     check: u => u <= 100 },
+  { id: 'founder',      name: 'Early Snacker',  desc: 'Got here early (first 100 players)',        icon: 'cake',     check: u => u <= 100 },
 ];
 
 // Award XP. Returns null if this exact award was already given (dedupeKey) or the amount is 0.

@@ -34,7 +34,7 @@ async function route() {
     if (token !== navToken) return;
     if (e.status === 404) return notFound(e.message);
     console.error(e);
-    main.innerHTML = `<div class="wrap empty"><h2>That didn't load</h2><p class="muted">${esc(e.message)}</p><button class="btn" id="retry">Try again</button></div>`;
+    main.innerHTML = `<div class="wrap empty"><h2>Well, that didn't load</h2><p class="muted">${esc(e.message)}</p><button class="btn" id="retry">Try again</button></div>`;
     $('#retry')?.addEventListener('click', route);
   }
   updateNav();
@@ -44,7 +44,7 @@ async function route() {
 function notFound(msg) {
   document.title = 'Not found';
   main.innerHTML = `<div class="wrap empty" style="padding:80px 20px">${logo(90)}<h1 style="font-size:3rem">Nothing on this shelf</h1>
-  <p class="muted">${esc(msg || "That page doesn't exist, or the game was taken down.")}</p><a class="btn primary" href="/games">Browse games</a></div>`;
+  <p class="muted">${esc(msg || "That page doesn't exist, or the game got pulled.")}</p><a class="btn primary" href="/games">Find something to play</a></div>`;
 }
 
 // ---------- chrome ----------
@@ -77,7 +77,7 @@ function toggleMenu() {
   const me = state.me;
   menuEl = document.createElement('div');
   menuEl.className = 'menu'; menuEl.setAttribute('role', 'menu');
-  menuEl.innerHTML = `<a role="menuitem" href="/u/${esc(me.username)}">Your profile</a><a role="menuitem" href="/settings">Edit profile</a><a role="menuitem" href="/upload">Upload a game</a><button role="menuitem" id="logout">Sign out</button>`;
+  menuEl.innerHTML = `<a role="menuitem" href="/u/${esc(me.username)}">Your profile</a><a role="menuitem" href="/settings">Edit profile</a><a role="menuitem" href="/upload">Upload your game</a><button role="menuitem" id="logout">Sign out</button>`;
   document.getElementById('topbar').appendChild(menuEl);
   $('#avatar-btn')?.setAttribute('aria-expanded', 'true');
   menuEl.querySelector('#logout').addEventListener('click', async () => { await api('/auth/logout', { method: 'POST' }); setMe(null); closeMenu(); go('/'); });
@@ -91,7 +91,7 @@ function renderFooter() {
   const theme = (() => { try { return localStorage.getItem('theme') || 'auto'; } catch { return 'auto'; } })();
   applyTheme(theme);
   document.getElementById('foot').innerHTML = `<div class="wrap">
-    <div style="display:flex;align-items:center;gap:10px">${logo(30)}<span>Bite-sized games, made by people like you.</span></div>
+    <div style="display:flex;align-items:center;gap:10px">${logo(30)}<span>Games for when you've got five minutes. Or five hours.</span></div>
     <nav aria-label="Footer"><a href="/games">Games</a><a href="/upload">Upload</a><a href="/leaderboard">Leaderboard</a><a href="/leaderboard#xp">How XP works</a></nav>
     <button class="theme-toggle" id="theme">Theme: ${theme}</button></div>`;
   $('#theme').addEventListener('click', () => {

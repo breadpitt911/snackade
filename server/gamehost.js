@@ -25,20 +25,27 @@ function setHeaders(res, file) {
   if (TYPES[ext]) res.setHeader('Content-Type', TYPES[ext]);
 }
 
-const sdkSource = () => fs.readFileSync(path.join(config.root, 'sdk', 'snackade-sdk.js'), 'utf8')
-  .replace('__SITE_ORIGIN__', config.siteOrigin);
+let sdkCache = null;
+const sdkSource = () => (sdkCache ??= fs.readFileSync(path.join(config.root, 'sdk', 'snackade-sdk.js'), 'utf8')
+  .replace('__SITE_ORIGIN__', config.siteOrigin));
 
 function htmlWithSdk(root) {
   return (req, res, next) => {
-    const rel = decodeURIComponent(req.path);
+    let rel;
+    try { rel = decodeURIComponent(req.path); } catch { return res.sendStatus(400); }
     if (!/\.html?$/i.test(rel)) return next();
     const file = path.resolve(root, '.' + rel);
-    if (!file.startsWith(path.resolve(root) + path.sep) || !fs.existsSync(file)) return next();
+    if (!file.startsWith(path.resolve(root) + path.sep)) return next();
+    let stat; try { stat = fs.statSync(file); } catch { return next(); }
+    if (!stat.isFile()) return next();
     let html = fs.readFileSync(file, 'utf8');
     const tag = '<script src="/sdk.js"></script>';
-    html = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => m + tag) : tag + html;
+    // after <head> if there is one (not <header>!), otherwise at the very top
+    html = /<head(\s[^>]*)?>/i.test(html) ? html.replace(/<head(\s[^>]*)?>/i, m => m + tag) : tag + html;
     setHeaders(res, file);
     res.setHeader('Cache-Control', 'no-cache');
+    // Game pages may only be framed by the site itself (stops hotlinking and clickjacking).
+    res.setHeader('Content-Security-Policy', `frame-ancestors ${config.siteOrigin}`);
     res.send(html);
   };
 }
