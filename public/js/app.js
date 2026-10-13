@@ -4,6 +4,7 @@ import { loadingArt } from './art.js';
 const ROUTES = [
   [/^\/$/, () => import('./views/home.js')],
   [/^\/games\/?$/, () => import('./views/browse.js')],
+  [/^\/games\/([a-z]+)\/?$/, () => import('./views/browse.js')],
   [/^\/game\/([a-z0-9-]+)\/?$/, () => import('./views/game.js')],
   [/^\/upload\/?$/, () => import('./views/upload.js')],
   [/^\/u\/([A-Za-z0-9_]+)\/?$/, () => import('./views/profile.js')],
@@ -22,7 +23,8 @@ async function route() {
   closeMenu();
   const match = ROUTES.find(([re]) => re.test(path));
   if (!match) return notFound();
-  main.innerHTML = `<div class="loading" aria-label="Loading">${loadingArt()}</div>`;
+  // First load: the server already put this page's content in <main>, so keep it on screen until the real view is ready.
+  if (!main.querySelector('[data-ssr]')) main.innerHTML = `<div class="loading" aria-label="Loading">${loadingArt()}</div>`;
   try {
     const mod = await match[1]();
     if (token !== navToken) return;
@@ -42,7 +44,7 @@ async function route() {
   main.focus({ preventScroll: true });
 }
 function notFound(msg) {
-  document.title = 'Not found';
+  document.title = `Not found · ${state.meta.siteName}`;
   main.innerHTML = `<div class="wrap empty" style="padding:80px 20px">${logo(90)}<h1 style="font-size:3rem">Nothing on this shelf</h1>
   <p class="muted">${esc(msg || "That page doesn't exist, or the game got pulled.")}</p><a class="btn primary" href="/games">Find something to play</a></div>`;
 }

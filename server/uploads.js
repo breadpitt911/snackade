@@ -119,7 +119,7 @@ export function parseGithubUrl(input) {
 }
 
 async function fetchCapped(url, max, headers = {}) {
-  const res = await fetch(url, { headers: { 'user-agent': 'snackade-importer', ...headers }, redirect: 'follow' });
+  const res = await fetch(url, { headers: { 'user-agent': 'snackbar-importer', ...headers }, redirect: 'follow' });
   if (res.status === 404) throw new UploadError("GitHub can't find that repo or branch. Double-check the link (private repos won't work).");
   if (res.status === 401 || res.status === 403 || res.status === 429) throw new UploadError('GitHub said no. The repo might be private, or we hit their rate limit. Give it a few minutes.');
   if (!res.ok) throw new UploadError(`GitHub had a moment (error ${res.status}). Try again in a bit.`);

@@ -1,0 +1,14 @@
+{
+  "name": "Snackbar · Free browser games",
+  "short_name": "Snackbar",
+  "description": "Free games you play right in your browser. No downloads.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EEF1F7",
+  "theme_color": "#3346FF",
+  "icons": [
+    { "src": "/img/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/img/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/img/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

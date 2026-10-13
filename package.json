@@ -1,5 +1,5 @@
 {
-  "name": "snackade",
+  "name": "snackbar",
   "version": "0.1.0",
   "description": "Bite-sized browser games, with XP for playing and making them.",
   "main": "server/index.js",

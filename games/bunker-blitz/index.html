@@ -225,7 +225,7 @@ document.addEventListener('pointerlockchange', () => {
 function pause() { state = 'paused'; if (document.pointerLockElement) document.exitPointerLock(); }
 function begin() { newGame(); if (!isTouch) requestLock(); }
 addEventListener('blur', () => { if (state === 'play') pause(); });
-if (window.Snackade) Snackade.onPause(() => { if (state === 'play') pause(); });
+if (window.Snackbar) Snackbar.onPause(() => { if (state === 'play') pause(); });
 
 // touch: left = joystick, right = look, fire button bottom-right
 const touch = { move: null, look: null, mx: 0, my: 0 };
@@ -337,7 +337,7 @@ function hurt(n) {
     P.hp = 0; state = 'over';
     if (document.pointerLockElement) document.exitPointerLock();
     if (score > best) { best = score; try { localStorage.setItem('blitz-best', best); } catch (e) {} }
-    if (window.Snackade) Snackade.gameOver(score);
+    if (window.Snackbar) Snackbar.gameOver(score);
   }
 }
 function project(sx, sy) {
@@ -533,7 +533,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-if (window.Snackade) Snackade.ready();
+if (window.Snackbar) Snackbar.ready();
 })();
 </script>
 </body>

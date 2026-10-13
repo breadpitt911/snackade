@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# One-shot server setup for Snackade on a fresh Ubuntu VM (Oracle Cloud Always Free Arm, or any Ubuntu 22.04/24.04).
+# One-shot server setup for Snackbar on a fresh Ubuntu VM (Oracle Cloud Always Free Arm, or any Ubuntu 22.04/24.04).
 #
 #   git clone https://github.com/breadpitt911/snackade.git && cd snackade
-#   sudo ./deploy/setup.sh --domain snackade.com --games-domain play.snackade.com --tunnel-token <TOKEN>
+#   sudo ./deploy/setup.sh --domain snackbar.games --games-domain play.snackbar.games --tunnel-token <TOKEN>
 #
-# What it does: installs Node 22 + cloudflared, copies the app to /opt/snackade, keeps data in
-# /var/lib/snackade, runs it as a locked-down systemd service on 127.0.0.1:8080, connects the
+# What it does: installs Node 22 + cloudflared, copies the app to /opt/snackbar, keeps data in
+# /var/lib/snackbar, runs it as a locked-down systemd service on 127.0.0.1:8080, connects the
 # Cloudflare Tunnel, and sets up nightly backups. Safe to re-run.
 set -euo pipefail
 
@@ -20,11 +20,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ $EUID -eq 0 ]] || { echo "Run with sudo."; exit 1; }
-[[ -n "$DOMAIN" && -n "$GAMES_DOMAIN" ]] || { echo "Need --domain and --games-domain (e.g. --domain snackade.com --games-domain play.snackade.com)"; exit 1; }
+[[ -n "$DOMAIN" && -n "$GAMES_DOMAIN" ]] || { echo "Need --domain and --games-domain (e.g. --domain snackbar.games --games-domain play.snackbar.games)"; exit 1; }
 [[ "$DOMAIN" != "$GAMES_DOMAIN" ]] || { echo "The games domain has to be different from the site domain."; exit 1; }
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APP=/opt/snackade DATA=/var/lib/snackade ENVF=/etc/snackade.env
+APP=/opt/snackbar DATA=/var/lib/snackbar ENVF=/etc/snackbar.env
 
 echo "==> Packages"
 apt-get update -qq
@@ -36,12 +36,12 @@ fi
 echo "    node $(node -v)"
 
 echo "==> App user and folders"
-id snackade >/dev/null 2>&1 || useradd --system --home "$DATA" --shell /usr/sbin/nologin snackade
-mkdir -p "$APP" "$DATA" /var/backups/snackade
+id snackbar >/dev/null 2>&1 || useradd --system --home "$DATA" --shell /usr/sbin/nologin snackbar
+mkdir -p "$APP" "$DATA" /var/backups/snackbar
 rsync -a --delete --exclude node_modules --exclude data --exclude .git "$SRC/" "$APP/"
 (cd "$APP" && npm ci --omit=dev --no-audit --no-fund --loglevel=error)
 chown -R root:root "$APP"
-chown -R snackade:snackade "$DATA"
+chown -R snackbar:snackbar "$DATA"
 chmod 750 "$DATA"
 
 echo "==> Config ($ENVF)"
@@ -57,18 +57,18 @@ DATA_DIR=$DATA
 ADMIN_USERNAMES=$ADMINS
 # GITHUB_TOKEN=   # optional: higher GitHub rate limits for repo imports
 EOF
-  chmod 640 "$ENVF"; chgrp snackade "$ENVF"
+  chmod 640 "$ENVF"; chgrp snackbar "$ENVF"
 else
   echo "    keeping existing $ENVF"
 fi
 
 echo "==> systemd service"
-install -m 644 "$APP/deploy/snackade.service" /etc/systemd/system/snackade.service
+install -m 644 "$APP/deploy/snackbar.service" /etc/systemd/system/snackbar.service
 systemctl daemon-reload
-systemctl enable --now snackade >/dev/null
-systemctl restart snackade
+systemctl enable --now snackbar >/dev/null
+systemctl restart snackbar
 sleep 2
-curl -fsS -o /dev/null -H "Host: $DOMAIN" http://127.0.0.1:8080/ && echo "    site is answering locally" || { echo "    site didn't start. Check: journalctl -u snackade -n 50"; exit 1; }
+curl -fsS -o /dev/null -H "Host: $DOMAIN" http://127.0.0.1:8080/ && echo "    site is answering locally" || { echo "    site didn't start. Check: journalctl -u snackbar -n 50"; exit 1; }
 
 echo "==> Cloudflare Tunnel"
 if ! command -v cloudflared >/dev/null; then
@@ -89,8 +89,8 @@ else
 fi
 
 echo "==> Nightly backups (03:30, keeps 14)"
-install -m 755 "$APP/deploy/backup.sh" /usr/local/bin/snackade-backup
-echo "30 3 * * * root /usr/local/bin/snackade-backup >/dev/null 2>&1" > /etc/cron.d/snackade-backup
+install -m 755 "$APP/deploy/backup.sh" /usr/local/bin/snackbar-backup
+echo "30 3 * * * root /usr/local/bin/snackbar-backup >/dev/null 2>&1" > /etc/cron.d/snackbar-backup
 
 echo
 echo "Done. Next: make sure both hostnames point at this tunnel in Cloudflare (see DEPLOY.md),"

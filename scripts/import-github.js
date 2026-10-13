@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Import a game straight from GitHub as an official "Snackade Team" game (no uploader account).
+// Import a game straight from GitHub as an official "Snackbar Team" game (no uploader account).
 //
 //   npm run import-github -- https://github.com/you/my-game
 //   npm run import-github -- https://github.com/you/games/tree/main/space-rocks --title "Space Rocks" --category shooter --featured

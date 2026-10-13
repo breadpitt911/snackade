@@ -242,7 +242,7 @@ function update(dt) {
 function gameOver() {
   setMode('over');
   if (score > best) { best = score; try { localStorage.setItem('gobble-best', best); } catch (e) {} }
-  if (window.Snackade) Snackade.gameOver(score);
+  if (window.Snackbar) Snackbar.gameOver(score);
 }
 const pos = e => [e.x + (e.dir ? e.dir[0] * e.p : 0), e.y + (e.dir ? e.dir[1] * e.p : 0)];
 
@@ -410,7 +410,7 @@ cv.addEventListener('touchmove', e => {
 }, { passive: false });
 cv.addEventListener('mousedown', () => { if (mode === 'paused') togglePause(); else start(); });
 addEventListener('blur', () => { if (mode === 'play') setMode('paused'); });
-if (window.Snackade) Snackade.onPause(() => { if (mode === 'play') setMode('paused'); });
+if (window.Snackbar) Snackbar.onPause(() => { if (mode === 'play') setMode('paused'); });
 
 // ---------- loop ----------
 newBoard(); mode = 'title'; score = 0; level = 1; lives = 3; popups = [];
@@ -423,7 +423,7 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 if (document.fonts) document.fonts.ready.then(() => { wallCache = null; });
-if (window.Snackade) Snackade.ready();
+if (window.Snackbar) Snackbar.ready();
 })();
 </script>
 </body>

@@ -7,7 +7,7 @@ export function coverHtml(g, opts) {
 
 export function cart(g) {
   const isNew = g.author && Date.now() - g.createdAt < 7 * 864e5;
-  const by = g.author ? `by ${esc(g.author.displayName)}` : 'Snackade original';
+  const by = g.author ? `by ${esc(g.author.displayName)}` : 'Snackbar original';
   return `<a class="cart" href="/game/${esc(g.slug)}">
     <div class="label">${coverHtml(g, { small: true })}${isNew ? '<span class="tag new">New</span>' : ''}${g.status === 'hidden' ? '<span class="tag">Hidden</span>' : ''}</div>
     <div class="meta"><h3>${esc(g.title)}</h3>
@@ -21,7 +21,7 @@ export function catChip(cat, { count, on, asButton } = {}) {
   const inner = `<span class="dot" style="background:${CAT_COLORS[cat]}">${icon(cat)}</span>${CAT_NAMES[cat] || cat}${count != null ? ` <small>${count}</small>` : ''}`;
   return asButton
     ? `<button type="button" class="chip" data-cat="${cat}" aria-pressed="${on ? 'true' : 'false'}">${inner}</button>`
-    : `<a class="chip ${on ? 'on' : ''}" href="/games?category=${cat}">${inner}</a>`;
+    : `<a class="chip ${on ? 'on' : ''}" href="/games/${cat}">${inner}</a>`;
 }
 
 export const sectionHead = (title, sub, link) => `<div class="section-head"><div><h2>${title}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${link ? `<a href="${link[1]}">${link[0]}</a>` : ''}</div>`;

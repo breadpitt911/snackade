@@ -7,7 +7,7 @@ fs.mkdirSync(config.dataDir, { recursive: true });
 fs.mkdirSync(storageDir, { recursive: true });
 fs.mkdirSync(coversDir, { recursive: true });
 
-export const db = new DatabaseSync(path.join(config.dataDir, 'snackade.db'));
+export const db = new DatabaseSync(path.join(config.dataDir, 'snackbar.db'));
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 4000;');
 
 db.exec(`

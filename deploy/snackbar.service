@@ -1,14 +1,14 @@
 [Unit]
-Description=Snackade game site
+Description=Snackbar game site
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=snackade
-Group=snackade
-WorkingDirectory=/opt/snackade
-EnvironmentFile=/etc/snackade.env
+User=snackbar
+Group=snackbar
+WorkingDirectory=/opt/snackbar
+EnvironmentFile=/etc/snackbar.env
 ExecStart=/usr/bin/node --disable-warning=ExperimentalWarning --max-old-space-size=4096 server/index.js
 Restart=always
 RestartSec=3
@@ -17,7 +17,7 @@ RestartSec=3
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/snackade
+ReadWritePaths=/var/lib/snackbar
 PrivateTmp=true
 PrivateDevices=true
 ProtectKernelTunables=true

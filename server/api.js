@@ -6,6 +6,7 @@ import { config, coversDir } from './config.js';
 import { one, all, run, tx, now, today } from './db.js';
 import { hashPassword, verifyPassword, createSession, destroySession, requireUser, rateLimit, clientIp, PASSWORD_MAX } from './auth.js';
 import { RULES, LEVELS, BADGES, award, checkBadges, touchStreak, progress, forUser } from './xp.js';
+import { CATEGORY_INFO } from './seo.js';
 import { processUpload, uniqueSlug, removeGameFiles, CATEGORIES, KINDS, UploadError } from './uploads.js';
 
 export const api = express.Router();
@@ -44,7 +45,8 @@ function meResponse(u, events = []) {
 
 // ---------- meta ----------
 api.get('/meta', (_req, res) => res.json({
-  siteName: config.siteName, gamesOrigin: config.gamesOrigin, categories: CATEGORIES, kinds: KINDS,
+  siteName: config.siteName, gamesOrigin: config.gamesOrigin, categories: CATEGORIES,
+  categoryIntro: Object.fromEntries(CATEGORIES.map(c => [c, CATEGORY_INFO[c].intro])), categoryNoun: Object.fromEntries(CATEGORIES.map(c => [c, CATEGORY_INFO[c].noun])), kinds: KINDS,
   rules: RULES, levels: LEVELS, badges: BADGES.map(({ check, ...b }) => b),
   limits: { zipMB: config.limits.zip / 1048576, htmlMB: config.limits.htmlFile / 1048576 },
 }));

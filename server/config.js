@@ -7,7 +7,7 @@ const PORT = Number(process.env.PORT || 8080);
 const GAMES_PORT = Number(process.env.GAMES_PORT || 8081);
 
 export const config = {
-  siteName: process.env.SITE_NAME || 'Snackade',
+  siteName: process.env.SITE_NAME || 'Snackbar',
   root: ROOT,
   port: PORT,
   // 127.0.0.1 when a tunnel/proxy on the same machine fronts the app (recommended), 0.0.0.0 in Docker.

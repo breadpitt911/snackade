@@ -4,5 +4,5 @@
 set -euo pipefail
 [[ $EUID -eq 0 ]] || { echo "Run with sudo."; exit 1; }
 [[ $# -ge 1 ]] || { echo "Usage: sudo ./deploy/import.sh <github url> [--title ...] [--category ...] [--featured]"; exit 1; }
-cd /opt/snackade
-sudo -u snackade bash -c 'set -a; source /etc/snackade.env; set +a; exec node --disable-warning=ExperimentalWarning scripts/import-github.js "$@"' _ "$@"
+cd /opt/snackbar
+sudo -u snackbar bash -c 'set -a; source /etc/snackbar.env; set +a; exec node --disable-warning=ExperimentalWarning scripts/import-github.js "$@"' _ "$@"

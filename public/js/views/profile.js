@@ -4,7 +4,7 @@ import { shelf } from '../components.js';
 export async function render(root, [username]) {
   const d = await api('/users/' + encodeURIComponent(username));
   const u = d.user, p = u.progress;
-  title(u.displayName);
+  title(`${u.displayName} (@${u.username})`);
   const earned = d.badges.filter(b => b.earnedAt).length;
 
   root.innerHTML = `<div class="wrap">

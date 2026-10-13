@@ -2,12 +2,12 @@ import { api, apiUpload, state, esc, icon, fmt, compact, ago, avatarHtml, toast,
 import { shelf, catChip, coverHtml } from '../components.js';
 import { CAT_NAMES } from '../art.js';
 
-const KIND_LABEL = { builtin: 'Snackade original', html: 'Single HTML file', html5: 'HTML5 game', github: 'Straight from GitHub', unity: 'Unity WebGL', embed: 'Hosted elsewhere' };
+const KIND_LABEL = { builtin: 'Snackbar original', html: 'Single HTML file', html5: 'HTML5 game', github: 'Straight from GitHub', unity: 'Unity WebGL', embed: 'Hosted elsewhere' };
 
 export async function render(root, [slug]) {
   let d = await api('/games/' + slug);
   const g = d.game;
-  title(g.title);
+  title(`${g.title} · Play free online`);
   const [aw, ah] = g.aspect.split(':').map(Number);
   let iframe = null, scoreQueue = Promise.resolve();
 
@@ -30,7 +30,7 @@ export async function render(root, [slug]) {
       <div class="game-info">
         <div class="title-row">
           <div><h1 style="font-size:clamp(2rem,4vw,3rem)">${esc(g.title)}</h1>
-            <div class="byline">${g.author ? `<span class="av">${avatarHtml(g.author)}</span><span>by <a href="/u/${esc(g.author.username)}">${esc(g.author.displayName)}</a></span>` : `<span>A Snackade original</span>`}
+            <div class="byline">${g.author ? `<span class="av">${avatarHtml(g.author)}</span><span>by <a href="/u/${esc(g.author.username)}">${esc(g.author.displayName)}</a></span>` : `<span>A Snackbar original</span>`}
               ${g.kind !== 'builtin' ? `<span class="muted">${esc(KIND_LABEL[g.kind] || '')}, added ${ago(g.createdAt)}</span>` : ''}</div></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">${catChip(g.category)}
             ${d.canEdit ? `<button class="btn small" id="edit">${icon('edit')}Edit</button>` : ''}</div>
@@ -94,12 +94,12 @@ export async function render(root, [slug]) {
   });
   if (d.liked) root.querySelector('#like').classList.add('liked');
 
-  // Messages from the game (via the Snackade SDK)
+  // Messages from the game (via the Snackbar SDK)
   let guestNoted = false;
   function onMessage(e) {
     if (!iframe || e.source !== iframe.contentWindow || e.origin !== g.playOrigin) return;
     const m = e.data;
-    if (!m || m.source !== 'snackade') return;
+    if (!m || m.source !== 'snackbar') return;
     if (m.type === 'score' && Number.isFinite(m.score)) {
       if (!state.me) {
         if (!guestNoted && m.score > 0) { guestNoted = true; toast(`Nice, ${fmt(m.score)}! <a href="/signup?next=/game/${esc(g.slug)}">Sign up</a> and it'll actually count next time.`, { pip: '🎯', ms: 6000 }); }
@@ -114,7 +114,7 @@ export async function render(root, [slug]) {
     }
   }
   addEventListener('message', onMessage);
-  const onVis = () => { if (document.hidden && iframe) iframe.contentWindow?.postMessage({ source: 'snackade-site', type: 'pause' }, g.playOrigin); };
+  const onVis = () => { if (document.hidden && iframe) iframe.contentWindow?.postMessage({ source: 'snackbar-site', type: 'pause' }, g.playOrigin); };
   document.addEventListener('visibilitychange', onVis);
 
   root.querySelector('#edit')?.addEventListener('click', () => editModal(g));
@@ -156,7 +156,7 @@ function editModal(g) {
     if (!fd.get('cover')?.size) fd.delete('cover');
     try {
       await new Promise((res, rej) => {
-        const x = new XMLHttpRequest(); x.open('PATCH', `/api/games/${g.slug}`); x.setRequestHeader('x-snackade', '1');
+        const x = new XMLHttpRequest(); x.open('PATCH', `/api/games/${g.slug}`); x.setRequestHeader('x-snackbar', '1');
         x.onload = () => x.status < 400 ? res() : rej(new Error(JSON.parse(x.responseText || '{}').error || 'Save failed'));
         x.onerror = () => rej(new Error('Network error')); x.send(fd);
       });

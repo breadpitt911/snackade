@@ -1,4 +1,3 @@
-import path from 'node:path';
 import fs from 'node:fs';
 import express from 'express';
 import { config, coversDir } from './config.js';
@@ -6,6 +5,7 @@ import { loadUser, csrfGuard } from './auth.js';
 import { api } from './api.js';
 import { createGameHost } from './gamehost.js';
 import { seedBuiltinGames } from './seed.js';
+import { renderPage, robots, sitemap } from './seo.js';
 
 const seeded = seedBuiltinGames();
 const gameHost = createGameHost();
@@ -38,18 +38,38 @@ app.use((_req, res, next) => {
   next();
 });
 
+// One URL per page: drop trailing slashes, retire /index.html and the old ?category= links.
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const [p, qs = ''] = req.originalUrl.split(/\?(.*)/s);
+  if (p === '/index.html') return res.redirect(301, '/' + (qs ? '?' + qs : ''));
+  if (p.length > 1 && p.endsWith('/') && !p.startsWith('/api/')) return res.redirect(301, p.replace(/\/+$/, '') + (qs ? '?' + qs : ''));
+  if (p === '/games' && req.query.category && /^[a-z]+$/.test(req.query.category)) {
+    const rest = new URLSearchParams(qs); rest.delete('category');
+    return res.redirect(301, `/games/${req.query.category}${rest.size ? '?' + rest : ''}`);
+  }
+  next();
+});
+app.get('/robots.txt', (_req, res) => res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(robots()));
+app.get('/sitemap.xml', (_req, res) => res.type('application/xml').set('Cache-Control', 'public, max-age=600').send(sitemap()));
+
 app.use(express.json({ limit: '64kb' }));
 app.use(loadUser);
-app.use('/api', csrfGuard, api);
+app.use('/api', (_req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex'); next(); }, csrfGuard, api);
 app.use('/covers', express.static(coversDir, { maxAge: '7d' }));
 // HTML/JS/CSS revalidate on every load (cheap 304s) so a deploy shows up immediately; images cache longer.
 app.use(express.static(config.publicDir, {
+  index: false,
   setHeaders: (res, file) => res.setHeader('Cache-Control', /\.(html|js|css)$/.test(file) ? 'no-cache' : 'public, max-age=86400'),
 }));
 
-// Single-page app: every other GET serves the shell.
-const shell = path.join(config.publicDir, 'index.html');
-app.get('*', (req, res, next) => (req.accepts('html') ? res.sendFile(shell) : next()));
+// Single-page app: every other GET serves the shell, pre-filled with that page's
+// title, meta tags and content for search engines, with a real 404 when it doesn't exist.
+app.get('*', (req, res, next) => {
+  if (!req.accepts('html')) return next();
+  const { status, html } = renderPage(req);
+  res.status(status).type('html').set('Cache-Control', 'no-cache').send(html);
+});
 app.use((_req, res) => res.status(404).json({ error: 'Not found' }));
 app.use((err, _req, res, _next) => {
   if (err.type === 'entity.parse.failed' || err.type === 'entity.too.large') return res.status(400).json({ error: 'Bad request.' });

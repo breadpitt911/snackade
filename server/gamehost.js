@@ -1,6 +1,6 @@
 // The games origin: serves built-in and uploaded games from a different origin
 // than the site, with headers that Unity / WebAssembly builds need, and injects
-// the small Snackade SDK into every HTML page so games can report scores.
+// the small Snackbar SDK into every HTML page so games can report scores.
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
@@ -26,7 +26,7 @@ function setHeaders(res, file) {
 }
 
 let sdkCache = null;
-const sdkSource = () => (sdkCache ??= fs.readFileSync(path.join(config.root, 'sdk', 'snackade-sdk.js'), 'utf8')
+const sdkSource = () => (sdkCache ??= fs.readFileSync(path.join(config.root, 'sdk', 'snackbar-sdk.js'), 'utf8')
   .replace('__SITE_ORIGIN__', config.siteOrigin));
 
 function htmlWithSdk(root) {
@@ -53,6 +53,9 @@ function htmlWithSdk(root) {
 export function createGameHost() {
   const app = express();
   app.disable('x-powered-by');
+  // The play host only holds raw game files; the game's real page lives on the site.
+  app.use((_req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex, nofollow'); next(); });
+  app.get('/robots.txt', (_req, res) => res.type('text/plain').send('User-agent: *\nAllow: /\n'));
   app.get('/sdk.js', (_req, res) => { res.type('application/javascript').set('Access-Control-Allow-Origin', '*').send(sdkSource()); });
 
   for (const [prefix, root] of [['/builtin', config.builtinGamesDir], ['/g', storageDir]]) {

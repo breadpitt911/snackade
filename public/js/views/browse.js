@@ -1,24 +1,26 @@
 import { api, state, esc, go, title } from '../core.js';
 import { cart, catChip } from '../components.js';
-import { emptyArt, CAT_NAMES } from '../art.js';
+import { emptyArt } from '../art.js';
 
 const SORTS = [['new', 'Newest'], ['popular', 'Most played'], ['loved', 'Most liked'], ['az', 'A–Z']];
 const SOURCES = [['', 'Everything'], ['staff', 'Originals'], ['community', 'Made by players']];
 
-export async function render(root, _p, qs) {
-  const q = qs.get('q') || '', category = qs.get('category') || '', sort = qs.get('sort') || 'new', source = qs.get('source') || '';
+export async function render(root, p, qs) {
+  const q = qs.get('q') || '', category = p[0] || qs.get('category') || '', sort = qs.get('sort') || 'new', source = qs.get('source') || '';
   const params = new URLSearchParams({ sort, limit: 36 });
   if (q) params.set('q', q); if (category) params.set('category', category); if (source) params.set('source', source);
+  if (category && !state.meta.categories.includes(category)) throw Object.assign(new Error("That category doesn't exist."), { status: 404 });
   const d = await api('/games?' + params);
-  const heading = q ? `Games matching “${esc(q)}”` : category ? CAT_NAMES[category] || category : 'Every game';
-  title(q ? `Search: ${q}` : category ? CAT_NAMES[category] : 'All games');
+  const noun = state.meta.categoryNoun?.[category] || category;
+  const heading = q ? `Games matching “${esc(q)}”` : category ? `Free ${esc(noun)} games` : 'Every game';
+  title(q ? `Search: ${q}` : category ? `Free ${noun} games, play online` : 'All free browser games');
 
   root.innerHTML = `<div class="wrap">
     <div class="page-head"><h1 style="font-size:clamp(2rem,4vw,3.2rem)">${heading}</h1>
-      <p>${d.total} ${d.total === 1 ? 'game' : 'games'}${q ? '' : ', all free, all playable right here'}.</p></div>
+      <p>${category && !q ? `${esc(state.meta.categoryIntro?.[category] || '')} ` : ''}${d.total} ${d.total === 1 ? 'game' : 'games'}${q || category ? '' : ', all free, all playable right here'}.</p></div>
     <div class="cats" style="margin-bottom:18px">
       <a class="chip ${!category ? 'on' : ''}" href="${link({ category: '' })}" style="padding-left:14px">All categories</a>
-      ${state.meta.categories.map(c => catChip(c, { on: c === category }).replace(`href="/games?category=${c}"`, `href="${link({ category: c })}"`)).join('')}
+      ${state.meta.categories.map(c => catChip(c, { on: c === category }).replace(`href="/games/${c}"`, `href="${link({ category: c })}"`)).join('')}
     </div>
     <div class="filters">
       <div class="seg" role="group" aria-label="Sort">${SORTS.map(([k, l]) => `<button data-sort="${k}" aria-pressed="${k === sort}">${l}</button>`).join('')}</div>
@@ -29,9 +31,10 @@ export async function render(root, _p, qs) {
   </div>`;
 
   function link(over) {
-    const u = new URLSearchParams({ q, category, sort, source, ...over });
+    const o = { q, category, sort, source, ...over };
+    const u = new URLSearchParams({ q: o.q, sort: o.sort, source: o.source });
     for (const [k, v] of [...u]) if (!v || (k === 'sort' && v === 'new')) u.delete(k);
-    const s = u.toString(); return '/games' + (s ? '?' + s : '');
+    const s = u.toString(); return '/games' + (o.category ? '/' + o.category : '') + (s ? '?' + s : '');
   }
   root.querySelectorAll('[data-sort]').forEach(b => b.addEventListener('click', () => go(link({ sort: b.dataset.sort }), { replace: true })));
   root.querySelectorAll('[data-source]').forEach(b => b.addEventListener('click', () => go(link({ source: b.dataset.source }), { replace: true })));

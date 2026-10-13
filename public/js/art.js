@@ -1,4 +1,4 @@
-// All of Snackade's drawn graphics live here as SVG strings: the logo, icons,
+// All of Snackbar's drawn graphics live here as SVG strings: the logo, icons,
 // creature avatars, badge medals, hand-drawn covers for the starter games and
 // generated covers for everything uploaded without one.
 const INK = '#15131F';

@@ -53,7 +53,7 @@ export async function render(root) {
         <div class="reward"><b>+${state.meta.rules.upload.xp} XP</b><span>the moment it's live. Then ${state.meta.rules.playReceived.xp} XP for every new player each day and ${state.meta.rules.likeReceived.xp} XP for every like.</span></div>
         <div><span class="lab" style="font-weight:700">Preview</span><div class="preview-cart" id="preview" style="margin-top:10px"></div></div>
         <div class="panel tips"><h3 id="tip-h"></h3><p id="tip"></p>
-          <p>Want a leaderboard? Call <code>Snackade.submitScore(score)</code> when a run ends. That helper's already loaded into every game, nothing to install.</p></div>
+          <p>Want a leaderboard? Call <code>Snackbar.submitScore(score)</code> when a run ends. That helper's already loaded into every game, nothing to install.</p></div>
       </aside>
     </div></div>`;
 

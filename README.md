@@ -1,4 +1,4 @@
-# Snackade
+# Snackbar
 
 Bite-sized browser games, with XP for playing *and* making them. A modern take on the old Miniclip idea: open a page, hit play, no installs.
 
@@ -22,7 +22,7 @@ The **first account you create is the admin** (can feature, hide or delete any g
 
 ## Adding your own games
 
-**From GitHub (as official "Snackade original" games):**
+**From GitHub (as official "Snackbar original" games):**
 
 ```bash
 npm run import-github -- https://github.com/you/space-rocks --title "Space Rocks" --category shooter --featured
@@ -51,12 +51,12 @@ Limits live in `server/config.js`: 95 MB uploads by default (`MAX_UPLOAD_MB`, ke
 Every HTML page served from the games origin gets a tiny SDK injected automatically:
 
 ```js
-Snackade.submitScore(score);   // posts to that game's leaderboard (XP for signed-in players)
-Snackade.gameOver(score);      // same, and marks the run finished
-Snackade.onPause(() => …);     // the player switched tabs
+Snackbar.submitScore(score);   // posts to that game's leaderboard (XP for signed-in players)
+Snackbar.gameOver(score);      // same, and marks the run finished
+Snackbar.onPause(() => …);     // the player switched tabs
 ```
 
-Guard calls with `if (window.Snackade)` so the game still runs elsewhere. Hosted-URL games can load the SDK from `<GAMES_ORIGIN>/sdk.js`.
+Guard calls with `if (window.Snackbar)` (or use `SnackbarGames` if your game already has its own `Snackbar` UI helper) so the game still runs elsewhere. Hosted-URL games can load the SDK from `<GAMES_ORIGIN>/sdk.js`.
 
 Scores are reported by the browser, so treat leaderboards as "for fun" until you add server-side verification for specific games (the hook is `POST /api/games/:slug/score` in `server/api.js`).
 
@@ -70,14 +70,14 @@ All in `server/xp.js`: the `RULES` table, the level curve (`xpToReach(level) = 5
 
 The general idea, for any host:
 
-The one hard requirement is **two hostnames**: one for the site, one for games, e.g. `snackade.com` and `play.snackade.com`. That separation is what keeps uploaded games from acting as the logged-in player.
+The one hard requirement is **two hostnames**: one for the site, one for games, e.g. `snackbar.games` and `play.snackbar.games`. That separation is what keeps uploaded games from acting as the logged-in player.
 
 ```bash
 NODE_ENV=production \
-SITE_ORIGIN=https://snackade.com \
-GAMES_ORIGIN=https://play.snackade.com \
+SITE_ORIGIN=https://snackbar.games \
+GAMES_ORIGIN=https://play.snackbar.games \
 PORT=8080 GAMES_PORT=8080 \
-DATA_DIR=/var/lib/snackade \
+DATA_DIR=/var/lib/snackbar \
 npm start
 ```
 
@@ -86,9 +86,9 @@ With `GAMES_PORT` equal to `PORT`, one process answers both hostnames (it routes
 `DATA_DIR` holds the SQLite database, uploaded games and covers. Put it on a persistent volume and back it up. A `Dockerfile` is included:
 
 ```bash
-docker build -t snackade .
-docker run -p 8080:8080 -v snackade-data:/data \
-  -e SITE_ORIGIN=https://snackade.com -e GAMES_ORIGIN=https://play.snackade.com snackade
+docker build -t snackbar .
+docker run -p 8080:8080 -v snackbar-data:/data \
+  -e SITE_ORIGIN=https://snackbar.games -e GAMES_ORIGIN=https://play.snackbar.games snackbar
 ```
 
 ### Environment variables
@@ -103,7 +103,7 @@ docker run -p 8080:8080 -v snackade-data:/data \
 | `DATA_DIR` | `./data` | Database, uploads, covers |
 | `ADMIN_USERNAMES` | | Comma-separated admin usernames (the first account is always admin) |
 | `GITHUB_TOKEN` | | For private repos / higher rate limits on imports |
-| `SITE_NAME` | Snackade | Rename the site |
+| `SITE_NAME` | Snackbar | Rename the site |
 | `MAX_UPLOAD_MB` | 95 | Biggest upload accepted |
 | `NODE_ENV` | | `production` enables secure cookies |
 

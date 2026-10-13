@@ -63,7 +63,7 @@ export const requireUser = (req, res, next) =>
 export function csrfGuard(req, res, next) {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
   const origin = req.get('origin');
-  if (req.get('x-snackade') !== '1' || (origin && origin !== config.siteOrigin)) {
+  if (req.get('x-snackbar') !== '1' || (origin && origin !== config.siteOrigin)) {
     return res.status(403).json({ error: 'Request blocked.' });
   }
   next();

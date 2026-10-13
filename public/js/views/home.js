@@ -12,8 +12,8 @@ export async function render(root) {
   root.innerHTML = `
   <section class="hero"><div class="wrap">
     <div>
-      <h1>Hit play. That's it, you're in.</h1>
-      <p class="lede">Free games that run right in your browser. No downloads, no nonsense. Grab an account if you want your scores and XP to stick, and if you've made a game, throw it up here.</p>
+      <h1>Free browser games. Hit play, you're in.</h1>
+      <p class="lede">Arcade, shooters, puzzles and more, all running right in your browser. No downloads, no nonsense. Grab an account if you want your scores and XP to stick, and if you've made a game, throw it up here.</p>
       <div class="cta">
         ${first ? `<a class="btn primary big" href="/game/${esc(first.slug)}" id="hero-play">${icon('play')}Play ${esc(first.title)}</a>` : ''}
         <a class="btn big" href="/upload">${icon('upload')}Upload your game</a>
@@ -56,7 +56,7 @@ export async function render(root) {
 }
 
 function screenInner(g) {
-  return `${coverHtml(g)}<div class="play-overlay"><div class="title-plate"><h2>${esc(g.title)}</h2><p>${g.author ? 'by ' + esc(g.author.displayName) : 'Snackade original'}, ${compact(g.plays)} ${g.plays === 1 ? 'play' : 'plays'}</p></div>
+  return `${coverHtml(g)}<div class="play-overlay"><div class="title-plate"><h2>${esc(g.title)}</h2><p>${g.author ? 'by ' + esc(g.author.displayName) : 'Snackbar original'}, ${compact(g.plays)} ${g.plays === 1 ? 'play' : 'plays'}</p></div>
     <span class="btn primary">${icon('play')}<span>Play</span></span></div>`;
 }
 export { cart };

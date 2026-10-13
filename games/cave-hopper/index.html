@@ -87,7 +87,7 @@ function crash() {
   sfx(160, .6, 'sawtooth', .07, -120);
   for (let i = 0; i < 40; i++) parts.push({ x: bot.x, y: bot.y, vx: rnd(-260, 260), vy: rnd(-260, 200), life: rnd(.5, 1.1), c: ['#ffc93c', '#1b1530', '#ff5a36', '#fff4e0'][i % 4], r: rnd(2, 5) });
   if (score > best) { best = score; try { localStorage.setItem('hopper-best', best); } catch (e) {} }
-  if (window.Snackade) Snackade.gameOver(score);
+  if (window.Snackbar) Snackbar.gameOver(score);
 }
 
 function update(dt) {
@@ -236,13 +236,13 @@ addEventListener('keyup', e => { if (['Space', 'ArrowUp', 'KeyW', 'Enter'].inclu
 cv.addEventListener('pointerdown', e => { e.preventDefault(); press(); });
 addEventListener('pointerup', release); addEventListener('pointercancel', release);
 addEventListener('blur', release);
-if (window.Snackade) Snackade.onPause(release);
+if (window.Snackbar) Snackbar.onPause(release);
 
 reset();
 let last = performance.now();
 function frame(now) { const dt = Math.min(1 / 30, (now - last) / 1000); last = now; update(dt); draw(); requestAnimationFrame(frame); }
 requestAnimationFrame(frame);
-if (window.Snackade) Snackade.ready();
+if (window.Snackbar) Snackbar.ready();
 })();
 </script>
 </body>

@@ -8,7 +8,7 @@ export const onMeChange = (fn) => listeners.add(fn);
 export function setMe(user) { state.me = user; listeners.forEach(fn => fn(user)); }
 
 export async function api(path, opts = {}) {
-  const init = { method: opts.method || 'GET', headers: { 'x-snackade': '1' }, credentials: 'same-origin' };
+  const init = { method: opts.method || 'GET', headers: { 'x-snackbar': '1' }, credentials: 'same-origin' };
   if (opts.body instanceof FormData) init.body = opts.body;
   else if (opts.body !== undefined) { init.body = JSON.stringify(opts.body); init.headers['content-type'] = 'application/json'; }
   const res = await fetch('/api' + path, init);
@@ -23,7 +23,7 @@ export async function api(path, opts = {}) {
 export function apiUpload(path, form, onProgress) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
-    x.open('POST', '/api' + path); x.setRequestHeader('x-snackade', '1');
+    x.open('POST', '/api' + path); x.setRequestHeader('x-snackbar', '1');
     x.upload.onprogress = e => e.lengthComputable && onProgress?.(e.loaded / e.total);
     x.onload = () => {
       let d = {}; try { d = JSON.parse(x.responseText); } catch { /* empty */ }
@@ -81,7 +81,8 @@ export function ago(ts) {
   for (const [sec, name] of units) if (s >= sec) { const v = Math.floor(s / sec); return `${v} ${name}${v > 1 ? 's' : ''} ago`; }
 }
 export const avatarHtml = (u, size) => avatar(u?.avatar || {}, size);
-export function title(t) { document.title = t ? `${t} · ${state.meta?.siteName || 'Snackade'}` : `${state.meta?.siteName || 'Snackade'} · free games, right in your browser`; }
+// Mirrors the titles the server renders (server/seo.js) so they don't change once the app loads.
+export function title(t) { const n = state.meta?.siteName || 'Snackbar'; document.title = t ? `${t} · ${n}` : `${n} · Free browser games, no downloads`; }
 
 // ---------- toasts ----------
 export function toast(text, { pip = '★', kind = '', ms = 3600 } = {}) {
