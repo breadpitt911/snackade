@@ -23,6 +23,8 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
+# If a whole "cloudflared tunnel run --token eyJ..." line arrived as one argument, keep just the token (the last word).
+TOKEN="${TOKEN##* }"
 [[ $EUID -eq 0 ]] || { echo "Run with sudo."; exit 1; }
 [[ -n "$DOMAIN" && -n "$GAMES_DOMAIN" ]] || { echo "Need --domain and --games-domain (e.g. --domain snackbar.games --games-domain play.snackbar.games)"; exit 1; }
 [[ "$DOMAIN" != "$GAMES_DOMAIN" ]] || { echo "The games domain has to be different from the site domain."; exit 1; }
