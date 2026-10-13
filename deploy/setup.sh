@@ -79,14 +79,17 @@ if ! command -v cloudflared >/dev/null; then
   mkdir -p --mode=0755 /usr/share/keyrings
   curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /usr/share/keyrings/cloudflare-main.gpg
   echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' > /etc/apt/sources.list.d/cloudflared.list
-  apt-get update -qq && apt-get install -y -qq cloudflared >/dev/null
+  apt-get update -qq
+  apt-get install -y -qq cloudflared >/dev/null || { echo "    couldn't install cloudflared. See the error above."; exit 1; }
 fi
+command -v cloudflared >/dev/null || { echo "    cloudflared isn't installed. Try: sudo apt-get install -y cloudflared"; exit 1; }
+echo "    $(cloudflared --version | head -1)"
 if [[ -n "$TOKEN" ]]; then
   if systemctl list-unit-files | grep -q '^cloudflared.service'; then
     echo "    cloudflared service already installed (to change the token: cloudflared service uninstall, then re-run)"
   else
-    cloudflared service install "$TOKEN" >/dev/null 2>&1
-    echo "    tunnel connected"
+    cloudflared service install "$TOKEN" || { echo; echo "    cloudflared couldn't install the tunnel (error above). Check the token is only the long eyJ... string and try again."; exit 1; }
+    echo "    tunnel service installed"
   fi
 else
   echo "    no --tunnel-token given; run 'sudo cloudflared service install <TOKEN>' when you have it"
