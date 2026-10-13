@@ -15,6 +15,10 @@ while [[ $# -gt 0 ]]; do
     --domain) DOMAIN="$2"; shift 2 ;;
     --games-domain) GAMES_DOMAIN="$2"; shift 2 ;;
     --tunnel-token) TOKEN="$2"; shift 2 ;;
+    # People often paste Cloudflare's whole command (cloudflared tunnel run --token eyJ...). Cope with that.
+    --token) TOKEN="$2"; shift 2 ;;
+    cloudflared|tunnel|run|service|install) shift ;;
+    eyJ*) TOKEN="$1"; shift ;;
     --admins) ADMINS="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
