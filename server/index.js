@@ -6,8 +6,13 @@ import { api } from './api.js';
 import { createGameHost } from './gamehost.js';
 import { seedBuiltinGames } from './seed.js';
 import { renderPage, robots, sitemap } from './seo.js';
+import { finalizeMonths } from './community.js';
 
 const seeded = seedBuiltinGames();
+// Lock in Game of the Month for any month that has ended, now and then hourly.
+const decideMonths = () => { try { finalizeMonths(console.log); } catch (e) { console.error('monthly awards failed', e); } };
+decideMonths();
+setInterval(decideMonths, 60 * 60e3).unref();
 const gameHost = createGameHost();
 const gamesHost = new URL(config.gamesOrigin).host.toLowerCase();
 const siteHost = new URL(config.siteOrigin).host.toLowerCase();
@@ -17,6 +22,8 @@ const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 'loopback');
 
+// www.<site> → <site>, so the www address works as soon as it reaches this server.
+app.use((req, res, next) => ((req.headers.host || '').toLowerCase() === 'www.' + siteHost ? res.redirect(301, config.siteOrigin + req.originalUrl) : next()));
 // Single-port deployments: requests addressed to the games host go to the game host app.
 app.use((req, res, next) => ((req.headers.host || '').toLowerCase() === gamesHost && gamesHost !== siteHost ? gameHost(req, res, next) : next()));
 
@@ -28,8 +35,8 @@ app.use((_req, res, next) => {
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
     "script-src 'self'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src 'self' https://fonts.gstatic.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
     "img-src 'self' data: blob:",
     `frame-src ${config.gamesOrigin} https:`,
     "connect-src 'self'",
@@ -57,10 +64,13 @@ app.use(express.json({ limit: '64kb' }));
 app.use(loadUser);
 app.use('/api', (_req, res, next) => { res.setHeader('X-Robots-Tag', 'noindex'); next(); }, csrfGuard, api);
 app.use('/covers', express.static(coversDir, { maxAge: '7d' }));
+// Versioned code and styles (see assetVersion in seo.js): safe to cache forever.
+app.use('/v/:v', (req, res, next) => (/^[a-f0-9]{10}$/.test(req.params.v) && /^\/(js|css)\//.test(req.path) ? next() : res.sendStatus(404)),
+  express.static(config.publicDir, { index: false, immutable: true, maxAge: '365d' }), (_req, res) => res.sendStatus(404));
 // HTML/JS/CSS revalidate on every load (cheap 304s) so a deploy shows up immediately; images cache longer.
 app.use(express.static(config.publicDir, {
   index: false,
-  setHeaders: (res, file) => res.setHeader('Cache-Control', /\.(html|js|css)$/.test(file) ? 'no-cache' : 'public, max-age=86400'),
+  setHeaders: (res, file) => res.setHeader('Cache-Control', /\.(html|js|css)$/.test(file) ? 'no-cache' : /\.woff2$/.test(file) ? 'public, max-age=31536000, immutable' : 'public, max-age=86400'),
 }));
 
 // Single-page app: every other GET serves the shell, pre-filled with that page's

@@ -13,6 +13,9 @@ export const RULES = {
   topScore:      { xp: 50,  label: 'Took the #1 spot',          note: 'once per game per day' },
   streak:        { xp: 15,  label: 'Came back the next day',    note: 'starts at +15, goes up 10 a day, maxes at +75' },
   profile:       { xp: 50,  label: 'Wrote your bio',            note: 'once' },
+  rate:          { xp: 5,   label: 'Rated a game',              note: 'once per game' },
+  comment:       { xp: 10,  label: 'Left a comment',            note: 'first comment on each game' },
+  gotm:          { xp: 500, label: 'Won Game of the Month',     note: '2nd place gets 250, 3rd gets 100' },
 };
 
 // Total XP needed to *reach* a level. L2 = 100, L3 = 300, L5 = 1,000, L10 = 4,500, L20 = 19,000
@@ -54,6 +57,9 @@ export const BADGES = [
   { id: 'streak-7',     name: 'Week Streak',    desc: 'Come back 7 days in a row',             icon: 'flame',    check: u => one('SELECT streak FROM users WHERE id=?', u).streak >= 7 },
   { id: 'level-5',      name: 'Regular',        desc: 'Reach level 5',                       icon: 'star',     check: u => one('SELECT level FROM users WHERE id=?', u).level >= 5 },
   { id: 'level-10',     name: 'Veteran',        desc: 'Reach level 10',                      icon: 'bolt',     check: u => one('SELECT level FROM users WHERE id=?', u).level >= 10 },
+  { id: 'critic',       name: 'Critic',         desc: 'Rate 10 different games',             icon: 'quill',    check: u => count('SELECT COUNT(*) n FROM ratings WHERE user_id=?', u) >= 10 },
+  { id: 'chatterbox',   name: 'Chatterbox',     desc: 'Comment on 10 different games',       icon: 'bubble',   check: u => count('SELECT COUNT(DISTINCT game_id) n FROM comments WHERE user_id=?', u) >= 10 },
+  { id: 'gotm',         name: 'Game of the Month', desc: 'Make the game that wins a month',  icon: 'trophy',   check: u => count('SELECT COUNT(*) n FROM monthly_awards WHERE author_id=? AND place=1', u) >= 1 },
   { id: 'founder',      name: 'Early Snacker',  desc: 'Got here early (first 100 players)',        icon: 'cake',     check: u => u <= 100 },
 ];
 

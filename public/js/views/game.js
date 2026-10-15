@@ -1,6 +1,7 @@
 import { api, apiUpload, state, esc, icon, fmt, compact, ago, avatarHtml, toast, toastError, modal, go, requireLogin, title } from '../core.js';
 import { shelf, catChip, coverHtml } from '../components.js';
-import { CAT_NAMES } from '../art.js';
+import { CAT_NAMES, bite } from '../art.js';
+
 
 const KIND_LABEL = { builtin: 'Snackbar original', html: 'Single HTML file', html5: 'HTML5 game', github: 'Straight from GitHub', unity: 'Unity WebGL', embed: 'Hosted elsewhere' };
 
@@ -41,8 +42,10 @@ export async function render(root, [slug]) {
         ${g.tags.length ? `<div class="tags">${g.tags.map(t => `<a href="/games?q=${encodeURIComponent(t)}">#${esc(t)}</a>`).join('')}</div>` : ''}
         ${g.sourceUrl ? `<p class="muted" style="display:flex;gap:6px;align-items:center">${icon(g.kind === 'github' ? 'github' : 'link', 16)}<a href="${esc(g.sourceUrl)}" target="_blank" rel="noopener noreferrer">${g.kind === 'github' ? 'View source on GitHub' : 'Original site'}</a></p>` : ''}
       </div>
+      <section class="comments" id="comments" aria-labelledby="c-head"></section>
     </div>
     <aside class="side">
+      <div class="panel rating" id="rating"></div>
       <div class="panel board" id="board">${boardHtml(d)}</div>
       ${state.me ? '' : `<div class="panel"><h3>Heads up, you're not signed in</h3><p class="muted" style="margin:6px 0 14px">Play all you want, but your scores and XP won't save. Sign up takes about ten seconds and you get ${state.meta.rules.play.xp} XP for every game you play.</p><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn primary small" href="/signup?next=/game/${esc(g.slug)}">Sign up</a><a class="btn small" href="/login?next=/game/${esc(g.slug)}">I've got an account</a></div></div>`}
     </aside>
@@ -64,7 +67,10 @@ export async function render(root, [slug]) {
     root.querySelector('#poster').replaceWith(iframe);
     iframe.focus();
     root.querySelector('#restart').disabled = false;
-    api(`/games/${g.slug}/play`, { method: 'POST' }).then(r => { root.querySelector('#plays-n').textContent = fmt(r.plays); root.querySelector('#plays-w').textContent = r.plays === 1 ? 'play' : 'plays'; }).catch(() => {});
+    api(`/games/${g.slug}/play`, { method: 'POST' }).then(r => {
+      root.querySelector('#plays-n').textContent = fmt(r.plays); root.querySelector('#plays-w').textContent = r.plays === 1 ? 'play' : 'plays';
+      if (state.me && d.rating.blocker === 'play') { d.rating.blocker = null; renderRating(); }
+    }).catch(() => {});
   }
   root.querySelector('#poster').addEventListener('click', start);
   root.querySelector('#restart').addEventListener('click', () => { if (iframe) { iframe.src = g.playUrl; iframe.focus(); } });
@@ -119,7 +125,110 @@ export async function render(root, [slug]) {
 
   root.querySelector('#edit')?.addEventListener('click', () => editModal(g));
 
+  // ---------- Snack Score ----------
+  const ratingEl = root.querySelector('#rating');
+  function renderRating() {
+    ratingEl.innerHTML = ratingHtml(d.rating, g);
+    const btns = [...ratingEl.querySelectorAll('[data-stars]')], label = ratingEl.querySelector('#rate-label');
+    const labels = state.meta.ratingLabels;
+    const show = n => { btns.forEach(b => b.classList.toggle('hot', +b.dataset.stars <= n)); label.textContent = n ? labels[n] : (d.rating.mine ? `You said: ${labels[d.rating.mine]}` : 'Tap a cookie'); };
+    btns.forEach(b => {
+      b.addEventListener('mouseenter', () => show(+b.dataset.stars));
+      b.addEventListener('focus', () => show(+b.dataset.stars));
+      b.addEventListener('click', async () => {
+        const stars = +b.dataset.stars;
+        btns.forEach(x => x.disabled = true);
+        try {
+          const r = await api(`/games/${g.slug}/rate`, { method: 'POST', body: { stars } });
+          d.rating = r.rating; renderRating();
+          ratingEl.querySelector('#rate-label').textContent = `You said: ${labels[stars]}. Thanks!`;
+        } catch (err) { toastError(err.message); btns.forEach(x => x.disabled = false); }
+      });
+    });
+    ratingEl.querySelector('.bites')?.addEventListener('mouseleave', () => show(0));
+    if (label) show(0);
+  }
+  renderRating();
+
+  // ---------- comments ----------
+  const cEl = root.querySelector('#comments');
+  const max = state.meta.commentMax;
+  cEl.innerHTML = `<h2 id="c-head">Comments <small class="num" id="c-total">${fmt(d.comments.total)}</small></h2>
+    ${state.me ? `<form class="c-form" id="c-form"><span class="av">${avatarHtml(state.me)}</span>
+        <div class="field"><label class="sr" for="c-body">Your comment</label><textarea id="c-body" maxlength="${max}" rows="3" placeholder="What did you think? Tips, high scores, bugs, all welcome. Keep it friendly."></textarea>
+        <div class="c-actions"><span class="muted num" id="c-count">0 / ${max}</span><button class="btn primary small" id="c-send" disabled>${icon('chat', 16)}Post it</button></div></div></form>`
+      : `<p class="c-signin"><a href="/login?next=/game/${esc(g.slug)}">Sign in</a> to join the chat. Takes ten seconds.</p>`}
+    <ol class="clist" id="clist">${d.comments.items.map(commentHtml).join('')}</ol>
+    ${d.comments.items.length ? '' : '<p class="muted" id="c-empty">No comments yet. Say something nice, or at least something useful.</p>'}
+    <div class="c-more"><button class="btn small" id="c-more" ${d.comments.total > d.comments.items.length ? '' : 'hidden'}>Show older comments</button></div>`;
+  const list = cEl.querySelector('#clist');
+  let loaded = d.comments.items.length, total = d.comments.total;
+  const setTotal = n => { total = n; cEl.querySelector('#c-total').textContent = fmt(n); };
+  const form = cEl.querySelector('#c-form');
+  if (form) {
+    const ta = form.querySelector('textarea'), send = form.querySelector('#c-send'), count = form.querySelector('#c-count');
+    ta.addEventListener('input', () => { count.textContent = `${ta.value.length} / ${max}`; send.disabled = ta.value.trim().length < 2; });
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !send.disabled) form.requestSubmit(); });
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      send.disabled = true;
+      try {
+        const r = await api(`/games/${g.slug}/comments`, { method: 'POST', body: { body: ta.value } });
+        list.insertAdjacentHTML('afterbegin', commentHtml(r.comment)); loaded++;
+        cEl.querySelector('#c-empty')?.remove();
+        setTotal(r.total); ta.value = ''; count.textContent = `0 / ${max}`;
+
+      } catch (err) { toastError(err.message); send.disabled = false; }
+    });
+  }
+  cEl.querySelector('#c-more').addEventListener('click', async e => {
+    const btn = e.currentTarget; btn.disabled = true;
+    try {
+      const r = await api(`/games/${g.slug}/comments?offset=${loaded}`);
+      list.insertAdjacentHTML('beforeend', r.items.map(commentHtml).join('')); loaded += r.items.length;
+      btn.hidden = loaded >= r.total; btn.disabled = false;
+    } catch (err) { toastError(err.message); btn.disabled = false; }
+  });
+  // Delete is a two-step button: first click arms it, second click deletes.
+  list.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-del]');
+    if (!btn) return;
+    if (!btn.classList.contains('armed')) { btn.classList.add('armed'); btn.textContent = 'Sure? Delete'; setTimeout(() => { btn.classList.remove('armed'); btn.textContent = 'Delete'; }, 4000); return; }
+    btn.disabled = true;
+    try {
+      await api(`/comments/${btn.dataset.del}`, { method: 'DELETE' });
+      btn.closest('li').remove(); loaded--; setTotal(Math.max(0, total - 1));
+    } catch (err) { toastError(err.message); btn.disabled = false; }
+  });
+
   return () => { removeEventListener('message', onMessage); document.removeEventListener('visibilitychange', onVis); };
+}
+
+function ratingHtml(r, g) {
+  const labels = state.meta.ratingLabels;
+  const head = r.count
+    ? `<div class="score-head"><b class="score-num num">${r.avg.toFixed(1)}</b><div><div class="avg-bites" aria-hidden="true">${[1, 2, 3, 4, 5].map(n => bite(r.avg >= n - .25, 20)).join('')}</div>
+        <small class="muted">${fmt(r.count)} ${r.count === 1 ? 'rating' : 'ratings'} · mostly “${labels[Math.max(1, Math.min(5, Math.round(r.avg)))]}”</small></div></div>
+      <div class="dist" aria-label="How people rated it">${[5, 4, 3, 2, 1].map(n => { const c = r.dist[n - 1], pct = r.count ? Math.round(c / r.count * 100) : 0;
+        return `<div class="drow"><span>${n}</span><span class="bar"><i style="width:${pct}%"></i></span><span class="num muted">${c}</span></div>`; }).join('')}</div>`
+    : `<p class="muted">No ratings yet. Play it and be the first.</p>`;
+  const why = { signin: `<a href="/login?next=/game/${esc(g.slug)}">Sign in</a> to rate it.`, own: "It's your game, so you can't rate it. Nice try though.", play: 'Give it a play first, then come back and rate it.' }[r.blocker];
+  const me = why ? `<p class="rate-why">${why}</p>`
+    : `<div class="rate-me"><span class="lab">${r.mine ? 'Your rating' : 'How was it?'}</span>
+        <div class="bites" role="radiogroup" aria-label="Rate ${esc(g.title)}">${[1, 2, 3, 4, 5].map(n =>
+          `<button type="button" role="radio" data-stars="${n}" aria-checked="${r.mine === n}" aria-label="${n} of 5: ${esc(labels[n])}" class="${r.mine >= n ? 'set' : ''}">${bite(r.mine >= n, 34)}</button>`).join('')}</div>
+        <span class="rate-label" id="rate-label" aria-live="polite"></span></div>`;
+  return `<h3 style="display:flex;gap:8px;align-items:center">${icon('cookie', 20)}Snack Score</h3>${head}${me}`;
+}
+
+function commentHtml(c) {
+  const labels = state.meta.ratingLabels;
+  return `<li class="comment"><a class="av" href="/u/${esc(c.user.username)}" tabindex="-1" aria-hidden="true">${avatarHtml(c.user)}</a>
+    <div class="cbody"><div class="cmeta"><a href="/u/${esc(c.user.username)}">${esc(c.user.displayName)}</a><span class="lvl">Lv ${c.user.level}</span>
+      ${c.stars ? `<span class="crated" title="Rated it ${c.stars}/5: ${esc(labels[c.stars])}">${bite(true, 14)}${c.stars}/5</span>` : ''}
+      <time class="muted" datetime="${new Date(c.createdAt).toISOString()}">${ago(c.createdAt)}</time>
+      ${c.canDelete ? `<button class="cdel" data-del="${c.id}">Delete</button>` : ''}</div>
+    <p>${esc(c.body)}</p></div></li>`;
 }
 
 function boardHtml(d) {

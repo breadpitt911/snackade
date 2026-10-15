@@ -10,6 +10,7 @@ const ROUTES = [
   [/^\/u\/([A-Za-z0-9_]+)\/?$/, () => import('./views/profile.js')],
   [/^\/settings\/?$/, () => import('./views/settings.js')],
   [/^\/leaderboard\/?$/, () => import('./views/leaderboard.js')],
+  [/^\/hall-of-fame\/?$/, () => import('./views/halloffame.js')],
   [/^\/(login|signup)\/?$/, () => import('./views/auth.js')],
 ];
 
@@ -54,7 +55,7 @@ function renderTopbar() {
   const me = state.me;
   document.getElementById('topbar').innerHTML = `<div class="wrap">
     <a class="logo" href="/" aria-label="${esc(state.meta.siteName)} home">${logo()}<span>${esc(state.meta.siteName)}</span></a>
-    <nav class="nav" aria-label="Main"><a href="/games">Games</a><a href="/leaderboard">Leaderboard</a></nav>
+    <nav class="nav" aria-label="Main"><a href="/games">Games</a><a href="/hall-of-fame">Hall of Fame</a><a href="/leaderboard">Leaderboard</a></nav>
     <form class="search" role="search" id="search">${icon('search')}<input name="q" type="search" placeholder="Search games" aria-label="Search games" value="${esc(new URLSearchParams(location.search).get('q') || '')}"></form>
     <div class="me">
       <a class="btn lemon small upload-btn" href="/upload">${icon('upload')}<span>Upload</span></a>
@@ -79,10 +80,12 @@ function toggleMenu() {
   const me = state.me;
   menuEl = document.createElement('div');
   menuEl.className = 'menu'; menuEl.setAttribute('role', 'menu');
-  menuEl.innerHTML = `<a role="menuitem" href="/u/${esc(me.username)}">Your profile</a><a role="menuitem" href="/settings">Edit profile</a><a role="menuitem" href="/upload">Upload your game</a><button role="menuitem" id="logout">Sign out</button>`;
-  document.getElementById('topbar').appendChild(menuEl);
+  menuEl.innerHTML = `<div class="menu-head" role="none"><b>${esc(me.displayName)}</b><small>@${esc(me.username)} · Level ${me.progress.level}</small></div>
+    <a role="menuitem" href="/u/${esc(me.username)}">Your profile</a><a role="menuitem" href="/settings">Edit profile</a><a role="menuitem" href="/upload">Upload your game</a><a role="menuitem" href="/hall-of-fame">Hall of Fame</a><hr role="none"><button role="menuitem" id="logout">Sign out</button>`;
+  document.querySelector('#topbar .me').appendChild(menuEl);
   $('#avatar-btn')?.setAttribute('aria-expanded', 'true');
   menuEl.querySelector('#logout').addEventListener('click', async () => { await api('/auth/logout', { method: 'POST' }); setMe(null); closeMenu(); go('/'); });
+  menuEl.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
   menuEl.querySelector('a').focus();
 }
 function closeMenu() { menuEl?.remove(); menuEl = null; $('#avatar-btn')?.setAttribute('aria-expanded', 'false'); }
@@ -94,7 +97,7 @@ function renderFooter() {
   applyTheme(theme);
   document.getElementById('foot').innerHTML = `<div class="wrap">
     <div style="display:flex;align-items:center;gap:10px">${logo(30)}<span>Games for when you've got five minutes. Or five hours.</span></div>
-    <nav aria-label="Footer"><a href="/games">Games</a><a href="/upload">Upload</a><a href="/leaderboard">Leaderboard</a><a href="/leaderboard#xp">How XP works</a></nav>
+    <nav aria-label="Footer"><a href="/games">Games</a><a href="/upload">Upload</a><a href="/hall-of-fame">Hall of Fame</a><a href="/leaderboard">Leaderboard</a><a href="/leaderboard#xp">How XP works</a></nav>
     <button class="theme-toggle" id="theme">Theme: ${theme}</button></div>`;
   $('#theme').addEventListener('click', () => {
     const next = { auto: 'light', light: 'dark', dark: 'auto' }[document.documentElement.dataset.themeChoice || 'auto'];

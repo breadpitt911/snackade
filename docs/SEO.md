@@ -1,6 +1,23 @@
 # SEO notes for snackbar.games
 
-Audit done October 2026, before launch. Everything marked **Fixed** is in the code. The rest is for you to do once the site is live.
+Two audits so far: one before launch (first table) and one against the live site on 15 October 2026 (second table). Everything marked **Fixed** is in the code. The rest is for you to do in Cloudflare or Search Console.
+
+## Live-site audit, 15 October 2026
+
+Checked on the live site: status codes, response headers, titles, descriptions, canonicals, robots tags, structured data, robots.txt, sitemap, the www and play hostnames, and load timing.
+
+**Already good:** every page has its own title, description and canonical. Missing pages return a real 404 with `noindex`. robots.txt and sitemap.xml are correct. `play.` and `/api/` are kept out of search. HTTPS with HSTS, HTTP/3, zstd compression, about 150 ms to first byte, and the HTML shell is under 2 KB on the wire.
+
+| Issue | Severity | Status |
+|---|---|---|
+| Cloudflare was overriding cache headers on the site's code (4-hour browser cache), so after a deploy visitors could run old scripts against the new server. That's one way to end up with the bare, unstyled fallback page. | High | **Fixed in code.** Code and styles are now served from versioned URLs (`/v/<hash>/…`) that change on every deploy and are cached for a year. Also set Cloudflare → Caching → Configuration → **Browser Cache TTL: Respect Existing Headers**. |
+| `www.snackbar.games` showed a blank page. | High | **You:** Cloudflare → Rules → Redirect Rules → template "Redirect from WWW to root". The app now also redirects `www.` itself if that traffic ever reaches it. |
+| The font loaded from Google Fonts: an extra render-blocking third-party request, and visitors' IPs shared with Google (a known GDPR problem in the EU). | Medium | **Fixed.** The font is self-hosted (`/fonts`, SIL Open Font License) and preloaded. CSP no longer allows Google Fonts. |
+| Game pages had no review signal and no user-written content. | Medium | **Fixed.** New Snack Score ratings feed `aggregateRating` into the `VideoGame` structured data (eligible for star snippets in search). The latest 10 comments are in the crawlable HTML. |
+| Low contrast in dark mode (and a few light-mode captions). Accessibility issues also hurt quality signals. | Medium | **Fixed.** Every page now passes WCAG AA contrast in both themes, on desktop and mobile. |
+| New page worth indexing: monthly winners. | n/a | **Added.** `/hall-of-fame` with its own title, description, `ItemList` structured data, and a sitemap entry. "Game of the Month" pages tend to pick up links from game makers. |
+
+## Pre-launch audit
 
 ## What was wrong and what changed
 
@@ -53,9 +70,10 @@ The honest picture: you won't outrank Poki for "free browser games" any time soo
 
 ## To do after launch
 
-1. **Google Search Console:** add `snackbar.games` as a Domain property (verify with a DNS TXT record in Cloudflare), then submit `https://snackbar.games/sitemap.xml`.
-2. **Bing Webmaster Tools:** import from Search Console. One click, and it covers DuckDuckGo and ChatGPT search too.
-3. **Cloudflare:** add a Redirect Rule `www.snackbar.games/*` → `https://snackbar.games/${1}` (301).
-4. Check a game page in Google's Rich Results Test and a share preview with opengraph.xyz.
-5. **Content that can rank:** a "Games like old Miniclip" page, a "How to put your Unity/HTML5 game online for free" guide, and real descriptions on every official game. Each new good game is a new page that can rank.
-6. **Links:** post your own games on itch.io, r/WebGames and Newgrounds with a link back. Game makers who upload will link to their own game pages.
+1. **Cloudflare cache setting:** Caching → Configuration → Browser Cache TTL → **Respect Existing Headers**.
+2. **www redirect:** Rules → Redirect Rules → "Redirect from WWW to root".
+3. **Google Search Console:** add `snackbar.games` as a Domain property (verify with a DNS TXT record in Cloudflare), then submit `https://snackbar.games/sitemap.xml`.
+4. **Bing Webmaster Tools:** import from Search Console. One click, and it covers DuckDuckGo and ChatGPT search too.
+5. Check a game page with ratings in Google's Rich Results Test and a share preview with opengraph.xyz.
+6. **Content that can rank:** a "Games like old Miniclip" page, a "How to put your Unity/HTML5 game online for free" guide, and real descriptions on every official game. Each new good game is a new page that can rank.
+7. **Links:** tell winning makers to link to their Hall of Fame spot. Also post your own games on itch.io, r/WebGames and Newgrounds with a link back. Game makers who upload will link to their own game pages.

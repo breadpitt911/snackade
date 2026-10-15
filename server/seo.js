@@ -3,10 +3,12 @@
 // right status code (real 404s, not soft ones). The SPA then takes over in the
 // browser. Also serves robots.txt and sitemap.xml.
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { config } from './config.js';
 import { one, all } from './db.js';
 import { CATEGORIES } from './uploads.js';
+import { listComments, standings, pastWinners, monthOf, RATING_LABELS } from './community.js';
 
 export const CATEGORY_INFO = {
   arcade: { name: 'Arcade', noun: 'arcade', intro: "Free arcade games you can play right in your browser. Quick rounds, high scores, one more go. No downloads, no installs." },
@@ -83,6 +85,7 @@ function pageFor(pathname, query) {
     const desc = clip(g.description || `${g.title} is a free ${info.noun} game you can play right in your browser on ${NAME()}.`);
     const image = g.cover ? abs(`/covers/${g.cover}`) : null;
     const related = listGames('g.category=? AND g.id<>?', 'g.plays DESC', 8, g.category, g.id);
+    const comments = listComments(g.id, { limit: 10 }).items;
     const author = g.author_id ? { '@type': 'Person', name: g.a_display, url: abs(`/u/${g.a_username}`) } : { '@type': 'Organization', name: NAME(), url: abs('/') };
     return {
       title: `${g.title} · Play free online · ${NAME()}`, description: desc, canonical: url, image, ogType: 'website',
@@ -96,6 +99,8 @@ function pageFor(pathname, query) {
           datePublished: new Date(g.created_at).toISOString(), dateModified: new Date(g.updated_at).toISOString(),
           keywords: g.tags || undefined, ...(image ? { image } : {}),
           interactionStatistic: { '@type': 'InteractionCounter', interactionType: 'https://schema.org/PlayAction', userInteractionCount: g.plays },
+          ...(g.rating_count ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: Math.round((g.rating_sum / g.rating_count) * 10) / 10, ratingCount: g.rating_count, bestRating: 5, worstRating: 1 } } : {}),
+          ...(g.comment_count ? { commentCount: g.comment_count } : {}),
         },
         breadcrumbs([['Games', '/games'], [info.name, `/games/${g.category}`], [g.title, url]]),
       ],
@@ -104,6 +109,8 @@ function pageFor(pathname, query) {
         <p>${g.author_id ? `Made by <a href="/u/${esc(g.a_username)}">${esc(g.a_display)}</a>` : `A ${esc(NAME())} original`}. Free to play in your browser, no download.</p>
         ${g.description ? `<p>${esc(g.description)}</p>` : ''}
         ${g.instructions ? `<h2>How to play</h2><p>${esc(g.instructions)}</p>` : ''}
+        ${g.rating_count ? `<h2>Snack Score</h2><p>Rated ${(g.rating_sum / g.rating_count).toFixed(1)} out of 5 by ${g.rating_count} ${g.rating_count === 1 ? 'player' : 'players'}.</p>` : ''}
+        ${comments.length ? `<h2>What players say</h2><ul class="ssr-list">${comments.map(c => `<li><b>${esc(c.display_name)}</b>${c.stars ? ` (${c.stars}/5, ${esc(RATING_LABELS[c.stars])})` : ''}: <span>${esc(clip(c.body, 300))}</span></li>`).join('')}</ul>` : ''}
         ${related.length ? `<h2>More ${esc(info.noun)} games</h2>${gameLinks(related)}` : ''}`,
     };
   }
@@ -117,6 +124,22 @@ function pageFor(pathname, query) {
       // Profiles without any games are thin: fine to visit, not worth indexing.
       noindex: games.length === 0, ogType: 'profile',
       body: `<h1>${esc(u.display_name)}</h1>${u.bio ? `<p>${esc(u.bio)}</p>` : ''}${games.length ? `<h2>Games by ${esc(u.display_name)}</h2>${gameLinks(games)}` : ''}`,
+    };
+  }
+  if (pathname === '/hall-of-fame') {
+    const past = pastWinners(24).filter(m => m.winners.length);
+    const race = standings(monthOf(Date.now()), 10).filter(r => r.eligible);
+    const monthName = m => new Date(Date.UTC(+m.slice(0, 4), +m.slice(5) - 1, 1)).toLocaleString('en', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    const latest = past[0]?.winners.find(w => w.place === 1);
+    return {
+      title: `Hall of Fame: Game of the Month winners · ${NAME()}`, canonical: '/hall-of-fame',
+      description: clip(latest ? `${latest.title} is ${NAME()}'s Game of the Month for ${monthName(past[0].month)}. See every monthly winner, and this month's race for the crown, voted by players.`
+        : `Every month the best-rated game on ${NAME()} gets crowned Game of the Month, voted by players. See this month's race.`),
+      jsonld: past.length ? [{ '@context': 'https://schema.org', '@type': 'ItemList', name: `${NAME()} Game of the Month winners`,
+        itemListElement: past.map((m, i) => { const w = m.winners.find(x => x.place === 1); return w && { '@type': 'ListItem', position: i + 1, name: `${monthName(m.month)}: ${w.title}`, url: abs(`/game/${w.slug}`) }; }).filter(Boolean) }] : [],
+      body: `<h1>Hall of Fame</h1><p>Every month, the best-rated game takes the crown. Players rate what they play, and the winner locks in when the month ends.</p>
+        <h2>This month's race</h2>${race.length ? `<ol class="ssr-list">${race.map(r => `<li><a href="/game/${esc(r.slug)}">${esc(r.title)}</a> <span>${r.avg.toFixed(1)}/5 from ${r.votes} ratings</span></li>`).join('')}</ol>` : '<p>No ratings yet this month.</p>'}
+        ${past.map(m => `<h2>${esc(monthName(m.month))}</h2><ol class="ssr-list">${m.winners.map(w => `<li><a href="/game/${esc(w.slug)}">${esc(w.title)}</a> <span>${w.avg.toFixed(1)}/5 from ${w.votes} ratings</span></li>`).join('')}</ol>`).join('')}`,
     };
   }
   if (pathname === '/leaderboard') return {
@@ -142,8 +165,27 @@ function breadcrumbs(items) {
 }
 
 // ---------- HTML ----------
-let shellCache = null;
-const shell = () => (process.env.NODE_ENV === 'production' && shellCache) || (shellCache = fs.readFileSync(path.join(config.publicDir, 'index.html'), 'utf8'));
+// Code and styles are served from /v/<hash>/..., where the hash changes whenever any of those
+// files change. Browsers (and Cloudflare) can then cache them for a year, and a deploy can never
+// leave someone running old scripts against the new server. Relative imports inside the
+// scripts resolve under the same /v/<hash>/ prefix automatically.
+function hashDir(dir, h) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    const f = path.join(dir, e.name);
+    if (e.isDirectory()) hashDir(f, h); else h.update(e.name).update(fs.readFileSync(f));
+  }
+  return h;
+}
+const computeVersion = () => hashDir(path.join(config.publicDir, 'css'), hashDir(path.join(config.publicDir, 'js'), crypto.createHash('sha1'))).digest('hex').slice(0, 10);
+const PROD = process.env.NODE_ENV === 'production';
+let versionCache = null, shellCache = null;
+export const assetVersion = () => (PROD && versionCache) || (versionCache = computeVersion());
+const shell = () => {
+  if (PROD && shellCache) return shellCache;
+  const v = assetVersion();
+  return (shellCache = fs.readFileSync(path.join(config.publicDir, 'index.html'), 'utf8')
+    .replace(/(href|src)="\/(css|js)\//g, `$1="/v/${v}/$2/`));
+};
 
 function headTags(p) {
   const url = abs(p.canonical || '/');
@@ -191,7 +233,8 @@ export function sitemap() {
   if (Date.now() - sitemapCache.at < 10 * 60e3) return sitemapCache.xml;
   const day = ts => new Date(ts).toISOString().slice(0, 10);
   const latest = one(`SELECT MAX(updated_at) t FROM games g WHERE ${LIVE}`).t || Date.now();
-  const urls = [['/', latest], ['/games', latest], ['/leaderboard', null]];
+  const lastAward = one('SELECT MAX(finalized_at) t FROM monthly_results').t;
+  const urls = [['/', latest], ['/games', latest], ['/hall-of-fame', lastAward], ['/leaderboard', null]];
   for (const r of all(`SELECT category, MAX(updated_at) t FROM games g WHERE ${LIVE} GROUP BY category`)) urls.push([`/games/${r.category}`, r.t]);
   for (const g of all(`SELECT slug, updated_at FROM games g WHERE ${LIVE} ORDER BY plays DESC LIMIT 45000`)) urls.push([`/game/${g.slug}`, g.updated_at]);
   for (const u of all(`SELECT u.username, MAX(g.updated_at) t FROM users u JOIN games g ON g.author_id=u.id WHERE ${LIVE} GROUP BY u.id LIMIT 4000`)) urls.push([`/u/${u.username}`, u.t]);

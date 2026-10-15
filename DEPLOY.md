@@ -37,8 +37,8 @@ You don't need to open any extra ports. The tunnel only makes outgoing connectio
 
    | Subdomain | Domain | Service |
    |---|---|---|
-   | *(empty)* | snackbar.games | `HTTP` → `localhost:8080` |
-   | `play` | snackbar.games | `HTTP` → `localhost:8080` |
+   | *(empty)* | snackbar.games | `HTTP` → `127.0.0.1:8080` |
+   | `play` | snackbar.games | `HTTP` → `127.0.0.1:8080` |
 
    Cloudflare creates the DNS records for you.
 
@@ -68,7 +68,10 @@ Open `https://snackbar.games` and **sign up straight away. The first account is 
   - Then: *Eligible for cache*, Edge TTL: *Use cache-control header if present*.
 
   This lets Cloudflare cache big game files (wasm, Unity data, sprites) at its edge, so they mostly never hit your server. Game pages themselves are marked `no-cache`, so updates show up right away.
-- Optional: a **Redirect Rule** from `www.snackbar.games` to `snackbar.games` if you want `www` to work.
+- **Caching → Configuration → Browser Cache TTL:** set to **Respect Existing Headers**. The app already tells browsers exactly how long to keep each file.
+- **Rules → Redirect Rules → Create rule → template "Redirect from WWW to root"**, so `www.snackbar.games` goes to `snackbar.games`.
+- In the tunnel, point routes at `http://127.0.0.1:8080` rather than `localhost:8080` (avoids IPv6 surprises).
+- Only run `cloudflared` on the server. A copy running anywhere else (like your laptop) joins the same tunnel and causes random 502 errors.
 
 ## 6. Tell search engines
 

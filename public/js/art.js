@@ -25,6 +25,8 @@ export function logo(size = 42) {
 // ---------- icons (24px, stroke) ----------
 const P = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+  chat: '<path d="M4 5h16v11H10l-5 4v-4H4z"/>',
+  cookie: '<circle cx="12" cy="12" r="9"/><path d="M8.5 10h.01M14 15h.01M9 15.5h.01M15 9.5h.01"/>',
   play: '<path d="M7 4.5v15l13-7.5z" fill="currentColor" stroke="none"/>',
   heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.3 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/>',
   heartFill: '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.3 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z" fill="currentColor"/>',
@@ -59,6 +61,15 @@ const P = {
   casual: '<circle cx="12" cy="12" r="8"/><path d="M8.5 14a4 4 0 0 0 7 0"/><circle cx="9" cy="10" r=".8" fill="currentColor"/><circle cx="15" cy="10" r=".8" fill="currentColor"/>',
   multiplayer: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2A5 5 0 0 1 21.5 19"/>',
 };
+// ---------- the "bite" used for Snack Score ratings: a cookie with a bite out of it ----------
+export function bite(filled, size = 28) {
+  const m = id('bt');
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true" class="bite ${filled ? 'on' : ''}">
+  <defs><mask id="${m}"><rect width="24" height="24" fill="#fff"/><circle cx="21" cy="4" r="4.2" fill="#000"/><circle cx="16.4" cy="2.2" r="2.8" fill="#000"/></mask></defs>
+  <g mask="url(#${m})"><circle cx="12" cy="12.5" r="9.5" fill="${filled ? '#F2B45C' : 'none'}" stroke="currentColor" stroke-width="1.9"/>
+  ${filled ? '<g fill="#5B3A1E"><circle cx="8.5" cy="10" r="1.3"/><circle cx="13" cy="15.5" r="1.4"/><circle cx="8" cy="16" r="1"/><circle cx="15.5" cy="10.5" r="1"/><circle cx="11.5" cy="12" r=".8"/></g>' : '<g fill="currentColor" opacity=".45"><circle cx="8.5" cy="10" r="1"/><circle cx="13" cy="15.5" r="1"/><circle cx="8" cy="16" r=".8"/></g>'}</g></svg>`;
+}
+
 export const icon = (name, size) => `<svg viewBox="0 0 24 24" ${size ? `width="${size}" height="${size}"` : ''} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 
 export const CAT_COLORS = { arcade: '#FFD23F', action: '#FF5A36', shooter: '#22C79A', puzzle: '#8E6CF0', racing: '#4FC3F7', sports: '#A6E22E', platformer: '#FF5DA2', strategy: '#F2B98C', casual: '#FFB800', multiplayer: '#3346FF' };
@@ -116,8 +127,11 @@ const MEDAL_ICON = {
   crown: '<path d="M4 18 3 7l5 4 4-6 4 6 5-4-1 11z"/>', flame: '<path d="M12 21c4 0 7-3 7-7 0-5-5-7-5-12-3 2-5 5-5 8-1-1-2-2-2-4-1 2-2 4-2 8 0 4 3 7 7 7z"/>',
   star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>', bolt: P.action,
   cake: '<path d="M4 13h16v8H4zM4 16c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 4 0M12 13V9M12 6.5v.5"/>',
+  quill: '<path d="M20 4C12 4 7 9 5 19l2 1c1-3 2-5 4-6h4l-2-2 4-1-2-2c2-1 4-3 5-5z"/>',
+  bubble: '<path d="M4 5h16v11H10l-5 4v-4H4z"/><path d="M8 10h8M8 13h5"/>',
+  trophy: '<path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4c0 3 1.5 4.5 3 5M17 6h3c0 3-1.5 4.5-3 5M12 14v4M8 21h8M9 18h6"/>',
 };
-const MEDAL_COLORS = { joystick: '#FFD23F', plate: '#22C79A', wrench: '#4FC3F7', stack: '#8E6CF0', crowd: '#FF5A36', heart: '#FF5DA2', flag: '#A6E22E', crown: '#FFB800', flame: '#FF5A36', star: '#FFD23F', bolt: '#3346FF', cake: '#FF5DA2' };
+const MEDAL_COLORS = { joystick: '#FFD23F', plate: '#22C79A', wrench: '#4FC3F7', stack: '#8E6CF0', crowd: '#FF5A36', heart: '#FF5DA2', flag: '#A6E22E', crown: '#FFB800', flame: '#FF5A36', star: '#FFD23F', bolt: '#3346FF', cake: '#FF5DA2', quill: '#4FC3F7', bubble: '#A6E22E', trophy: '#FFB800' };
 export function medal(iconName) {
   const c = MEDAL_COLORS[iconName] || '#FFD23F';
   return `<svg class="medal" viewBox="0 0 64 64" aria-hidden="true">

@@ -17,7 +17,7 @@ export async function render(root, [username]) {
         <div class="levelbar">
           <div class="row"><span><b>Level ${p.level}</b> ${esc(p.title)}</span><span class="num">${fmt(p.xp)} / ${fmt(p.nextLevel)} XP</span></div>
           <div class="track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${p.pct}" aria-label="Progress to level ${p.level + 1}"><div class="fill" style="width:${Math.max(3, p.pct)}%"></div></div>
-          <div class="row"><span>${fmt(p.nextLevel - p.xp)} XP until level ${p.level + 1}</span>${d.isMe ? `<a href="/settings" style="font-weight:700;color:var(--cobalt);text-decoration:none">Edit profile</a>` : ''}</div>
+          <div class="row"><span>${fmt(p.nextLevel - p.xp)} XP until level ${p.level + 1}</span>${d.isMe ? `<a href="/settings" style="font-weight:700;color:var(--link);text-decoration:none">Edit profile</a>` : ''}</div>
         </div>
       </div>
     </div>

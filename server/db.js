@@ -95,6 +95,51 @@ CREATE TABLE IF NOT EXISTS badges (
 );
 `);
 
+// ---------- community: ratings, comments, monthly awards ----------
+db.exec(`
+CREATE TABLE IF NOT EXISTS ratings (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  stars INTEGER NOT NULL CHECK (stars BETWEEN 1 AND 5),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, game_id)
+);
+CREATE INDEX IF NOT EXISTS ratings_game ON ratings(game_id);
+CREATE INDEX IF NOT EXISTS ratings_time ON ratings(updated_at);
+CREATE TABLE IF NOT EXISTS comments (
+  id INTEGER PRIMARY KEY,
+  game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS comments_game ON comments(game_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS monthly_results (
+  month TEXT PRIMARY KEY,          -- YYYY-MM (UTC), written once the month is over
+  finalized_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS monthly_awards (
+  month TEXT NOT NULL,
+  place INTEGER NOT NULL,
+  game_id INTEGER REFERENCES games(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,             -- kept in case the game is deleted later
+  slug TEXT NOT NULL,
+  author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  score REAL NOT NULL,
+  avg REAL NOT NULL,
+  votes INTEGER NOT NULL,
+  PRIMARY KEY (month, place)
+);
+`);
+// Cached rating totals on games, so lists can show a score without a join.
+{
+  const cols = new Set(db.prepare('PRAGMA table_info(games)').all().map(c => c.name));
+  if (!cols.has('rating_sum')) db.exec('ALTER TABLE games ADD COLUMN rating_sum INTEGER NOT NULL DEFAULT 0');
+  if (!cols.has('rating_count')) db.exec('ALTER TABLE games ADD COLUMN rating_count INTEGER NOT NULL DEFAULT 0');
+  if (!cols.has('comment_count')) db.exec('ALTER TABLE games ADD COLUMN comment_count INTEGER NOT NULL DEFAULT 0');
+}
+
 export const one = (sql, ...p) => db.prepare(sql).get(...p);
 export const all = (sql, ...p) => db.prepare(sql).all(...p);
 export const run = (sql, ...p) => db.prepare(sql).run(...p);

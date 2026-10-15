@@ -9,6 +9,12 @@ Bite-sized browser games, with XP for playing *and* making them. A modern take o
 
 No build step and no native dependencies: Node 22.13+ (uses the built-in SQLite) plus three npm packages.
 
+## Community
+
+- **Snack Score:** players rate games from 1 to 5 bites after playing them (not their own). Ratings show on cards and game pages and feed the game's structured data.
+- **Comments** on every game. The author, the game's owner and admins can delete them, and there are spam limits.
+- **Hall of Fame** (`/hall-of-fame`): a live race for the current month and podiums for past months. Months lock in automatically within an hour of ending (UTC), using a weighted average with a 3-rating minimum. The winning maker gets 500 XP and the Game of the Month badge.
+
 ## Quick start
 
 ```bash

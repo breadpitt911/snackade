@@ -6,7 +6,8 @@ import { config, coversDir } from './config.js';
 import { one, all, run, tx, now, today } from './db.js';
 import { hashPassword, verifyPassword, createSession, destroySession, requireUser, rateLimit, clientIp, PASSWORD_MAX } from './auth.js';
 import { RULES, LEVELS, BADGES, award, checkBadges, touchStreak, progress, forUser } from './xp.js';
-import { CATEGORY_INFO } from './seo.js';
+import { CATEGORY_INFO, clearSitemapCache } from './seo.js';
+import { ratingSummary, rateBlocker, rate, listComments, addComment, deleteComment, cleanBody, COMMENT_MAX, RATING_LABELS, MONTH_RULES, standings, pastWinners, monthOf, monthRange } from './community.js';
 import { processUpload, uniqueSlug, removeGameFiles, CATEGORIES, KINDS, UploadError } from './uploads.js';
 
 export const api = express.Router();
@@ -33,8 +34,20 @@ function publicGame(g) {
     sourceUrl: g.source_url, cover: g.cover ? `/covers/${g.cover}` : null, coverSeed: g.cover_seed, accent: g.accent,
     author: g.author_id ? publicUser({ username: g.a_username, display_name: g.a_display, avatar: g.a_avatar, level: g.a_level, xp: g.a_xp }) : null,
     featured: !!g.featured, status: g.status, aspect: g.aspect, plays: g.plays, likes: g.likes, sizeBytes: g.size_bytes, createdAt: g.created_at,
+    rating: g.rating_count ? { avg: Math.round((g.rating_sum / g.rating_count) * 10) / 10, count: g.rating_count } : null,
+    comments: g.comment_count || 0,
   };
 }
+export function publicComment(c, viewer, game) {
+  return {
+    id: c.id, body: c.body, createdAt: c.created_at, stars: c.stars ?? null,
+    user: publicUser({ username: c.username, display_name: c.display_name, avatar: c.avatar, level: c.level, xp: c.xp }),
+    canDelete: !!viewer && (viewer.id === c.user_id || !!viewer.is_admin || viewer.id === game.author_id),
+  };
+}
+// Small game card data for award/standings rows.
+const awardGame = r => ({ slug: r.slug, title: r.title, category: r.category, cover: r.cover ? `/covers/${r.cover}` : null, coverSeed: r.cover_seed, accent: r.accent,
+  author: r.a_username ? { username: r.a_username, displayName: r.a_display } : null });
 const GAME_SELECT = `SELECT g.*, u.username a_username, u.display_name a_display, u.avatar a_avatar, u.level a_level, u.xp a_xp
   FROM games g LEFT JOIN users u ON u.id = g.author_id`;
 const listGames = (where, order, limit, ...p) => all(`${GAME_SELECT} WHERE g.status='live' ${where ? 'AND ' + where : ''} ORDER BY ${order} LIMIT ${limit}`, ...p).map(publicGame);
@@ -48,6 +61,7 @@ api.get('/meta', (_req, res) => res.json({
   siteName: config.siteName, gamesOrigin: config.gamesOrigin, categories: CATEGORIES,
   categoryIntro: Object.fromEntries(CATEGORIES.map(c => [c, CATEGORY_INFO[c].intro])), categoryNoun: Object.fromEntries(CATEGORIES.map(c => [c, CATEGORY_INFO[c].noun])), kinds: KINDS,
   rules: RULES, levels: LEVELS, badges: BADGES.map(({ check, ...b }) => b),
+  ratingLabels: RATING_LABELS, commentMax: COMMENT_MAX, monthRules: MONTH_RULES,
   limits: { zipMB: config.limits.zip / 1048576, htmlMB: config.limits.htmlFile / 1048576 },
 }));
 
@@ -121,6 +135,8 @@ api.get('/home', (_req, res) => {
     community: listGames('g.author_id IS NOT NULL', 'g.created_at DESC', 12),
     loved: listGames('g.likes > 0', 'g.likes DESC', 8),
     categories: counts,
+    gotm: (() => { const m = pastWinners(1)[0]; const w = m?.winners.find(x => x.place === 1 && x.status === 'live'); return w ? { month: m.month, game: awardGame(w), avg: w.avg, votes: w.votes } : null; })(),
+    race: standings(monthOf(Date.now()), 3).filter(r => r.eligible).map(r => ({ game: awardGame(r), avg: r.avg, votes: r.votes })),
     stats: one("SELECT (SELECT COUNT(*) FROM games WHERE status='live') games, (SELECT COUNT(*) FROM users) players, (SELECT COALESCE(SUM(plays),0) FROM games) plays"),
   });
 });
@@ -161,6 +177,8 @@ api.get('/games/:slug', (req, res) => {
   res.json({
     game: publicGame(g), liked, myBest: best, canEdit: !!canEdit(req.user, g),
     leaderboard: leaderboard(g.id),
+    rating: { ...ratingSummary(g.id, req.user?.id), blocker: rateBlocker(req.user, g) },
+    comments: (({ items, total }) => ({ items: items.map(c => publicComment(c, req.user, g)), total }))(listComments(g.id, { limit: 20 })),
     related: listGames('g.category=? AND g.id<>?', 'g.plays DESC', 6, g.category, g.id),
     more: listGames('g.id<>?', 'RANDOM()', 6, g.id),
   });
@@ -326,6 +344,64 @@ api.delete('/games/:slug', requireUser, (req, res) => {
   removeGameFiles(g.slug);
   removeCover(g.cover);
   res.json({ ok: true });
+});
+
+// ---------- ratings & comments ----------
+api.post('/games/:slug/rate', requireUser, (req, res) => {
+  const g = findGame(req.params.slug, req.user);
+  if (!g) return bad(res, "Can't find that game.", 404);
+  const stars = Math.floor(Number(req.body.stars));
+  if (!(stars >= 1 && stars <= 5)) return bad(res, 'Pick 1 to 5 bites.');
+  const why = rateBlocker(req.user, g);
+  if (why === 'own') return bad(res, "Nice try. You can't rate your own game.", 403);
+  if (why === 'play') return bad(res, 'Give it a play first, then rate it.', 403);
+  if (!rateLimit(`rate:${req.user.id}`, 30, 60e3)) return bad(res, 'Easy there, too many ratings at once.', 429);
+  const events = [];
+  const summary = rate(req.user, g, stars, events);
+  clearSitemapCache();
+  res.json({ rating: { ...summary, blocker: null }, events: forUser(events, req.user.id) });
+});
+
+api.get('/games/:slug/comments', (req, res) => {
+  const g = findGame(req.params.slug, req.user);
+  if (!g) return bad(res, "Can't find that game.", 404);
+  const offset = Math.min(1e5, Math.max(0, Math.floor(Number(req.query.offset)) || 0));
+  const { items, total } = listComments(g.id, { limit: 20, offset });
+  res.json({ items: items.map(c => publicComment(c, req.user, g)), total });
+});
+
+api.post('/games/:slug/comments', requireUser, (req, res) => {
+  const g = findGame(req.params.slug, req.user);
+  if (!g) return bad(res, "Can't find that game.", 404);
+  const body = cleanBody(req.body.body);
+  if (body.length < 2) return bad(res, 'Say a bit more than that.');
+  if (body.length > COMMENT_MAX) return bad(res, `Keep it under ${COMMENT_MAX} characters.`);
+  const uid = req.user.id;
+  if (!rateLimit(`comment:${uid}`, 5, 10 * 60e3) || !rateLimit(`comment-day:${uid}`, 40, 864e5)) return bad(res, "You're commenting a lot. Take a breather and try again in a bit.", 429);
+  const last = one('SELECT body FROM comments WHERE user_id=? ORDER BY id DESC LIMIT 1', uid);
+  if (last && last.body === body) return bad(res, 'You just posted that.');
+  const events = [];
+  const c = addComment(req.user, g, body, events);
+  res.json({ comment: publicComment(c, req.user, g), total: one('SELECT comment_count n FROM games WHERE id=?', g.id).n, events: forUser(events, uid) });
+});
+
+api.delete('/comments/:id', requireUser, (req, res) => {
+  const c = one('SELECT c.id, c.user_id, g.author_id FROM comments c JOIN games g ON g.id=c.game_id WHERE c.id=?', Number(req.params.id));
+  if (!c) return bad(res, 'That comment is already gone.', 404);
+  const u = req.user;
+  if (!(u.id === c.user_id || u.is_admin || u.id === c.author_id)) return bad(res, "That's not yours to delete.", 403);
+  deleteComment(c.id);
+  res.json({ ok: true });
+});
+
+// ---------- hall of fame ----------
+api.get('/hall-of-fame', (_req, res) => {
+  const month = monthOf(Date.now());
+  res.json({
+    month, endsAt: monthRange(month)[1], rules: MONTH_RULES,
+    race: standings(month, 10).map(r => ({ game: awardGame(r), avg: r.avg, votes: r.votes, score: r.score, eligible: r.eligible })),
+    past: pastWinners(24).map(m => ({ month: m.month, winners: m.winners.map(w => ({ place: w.place, game: { ...awardGame(w), live: w.status === 'live' }, avg: w.avg, votes: w.votes })) })),
+  });
 });
 
 // ---------- people ----------
