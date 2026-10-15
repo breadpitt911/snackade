@@ -8,6 +8,8 @@ import { hashPassword, verifyPassword, createSession, destroySession, requireUse
 import { RULES, LEVELS, BADGES, award, checkBadges, touchStreak, progress, forUser } from './xp.js';
 import { CATEGORY_INFO, clearSitemapCache } from './seo.js';
 import { ratingSummary, rateBlocker, rate, listComments, addComment, deleteComment, cleanBody, COMMENT_MAX, RATING_LABELS, MONTH_RULES, standings, pastWinners, monthOf, monthRange } from './community.js';
+import { REPORT_REASONS, DETAILS_MAX, ReportError, createReport, listReports, resolveReport, openReportCount, exportData, deleteAccount } from './moderation.js';
+import { legalPage, MIN_AGE, contactEmail } from './legal.js';
 import { processUpload, uniqueSlug, removeGameFiles, CATEGORIES, KINDS, UploadError } from './uploads.js';
 
 export const api = express.Router();
@@ -35,7 +37,7 @@ function publicGame(g) {
     author: g.author_id ? publicUser({ username: g.a_username, display_name: g.a_display, avatar: g.a_avatar, level: g.a_level, xp: g.a_xp }) : null,
     featured: !!g.featured, status: g.status, aspect: g.aspect, plays: g.plays, likes: g.likes, sizeBytes: g.size_bytes, createdAt: g.created_at,
     rating: g.rating_count ? { avg: Math.round((g.rating_sum / g.rating_count) * 10) / 10, count: g.rating_count } : null,
-    comments: g.comment_count || 0,
+    comments: g.comment_count || 0, takenDown: !!g.taken_down,
   };
 }
 export function publicComment(c, viewer, game) {
@@ -43,6 +45,7 @@ export function publicComment(c, viewer, game) {
     id: c.id, body: c.body, createdAt: c.created_at, stars: c.stars ?? null,
     user: publicUser({ username: c.username, display_name: c.display_name, avatar: c.avatar, level: c.level, xp: c.xp }),
     canDelete: !!viewer && (viewer.id === c.user_id || !!viewer.is_admin || viewer.id === game.author_id),
+    canReport: !viewer || viewer.id !== c.user_id,
   };
 }
 // Small game card data for award/standings rows.
@@ -53,7 +56,7 @@ const GAME_SELECT = `SELECT g.*, u.username a_username, u.display_name a_display
 const listGames = (where, order, limit, ...p) => all(`${GAME_SELECT} WHERE g.status='live' ${where ? 'AND ' + where : ''} ORDER BY ${order} LIMIT ${limit}`, ...p).map(publicGame);
 
 function meResponse(u, events = []) {
-  return { user: { ...publicUser(u), bio: u.bio, streak: u.streak, progress: progress(u.xp) }, events: forUser(events, u.id) };
+  return { user: { ...publicUser(u), bio: u.bio, streak: u.streak, progress: progress(u.xp), ...(u.is_admin ? { openReports: openReportCount() } : {}) }, events: forUser(events, u.id) };
 }
 
 // ---------- meta ----------
@@ -62,6 +65,7 @@ api.get('/meta', (_req, res) => res.json({
   categoryIntro: Object.fromEntries(CATEGORIES.map(c => [c, CATEGORY_INFO[c].intro])), categoryNoun: Object.fromEntries(CATEGORIES.map(c => [c, CATEGORY_INFO[c].noun])), kinds: KINDS,
   rules: RULES, levels: LEVELS, badges: BADGES.map(({ check, ...b }) => b),
   ratingLabels: RATING_LABELS, commentMax: COMMENT_MAX, monthRules: MONTH_RULES,
+  reportReasons: REPORT_REASONS, reportDetailsMax: DETAILS_MAX, minAge: MIN_AGE, contactEmail: contactEmail(),
   limits: { zipMB: config.limits.zip / 1048576, htmlMB: config.limits.htmlFile / 1048576 },
 }));
 
@@ -80,12 +84,13 @@ api.post('/auth/signup', (req, res) => {
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) return bad(res, 'Usernames need 3–20 letters, numbers or underscores.');
   if (password.length < 8) return bad(res, 'Password needs at least 8 characters.');
   if (password.length > PASSWORD_MAX) return bad(res, `Password's too long (max ${PASSWORD_MAX}).`);
+  if (req.body.agree !== true) return bad(res, `Tick the box to confirm you're ${MIN_AGE} or older and OK with the Terms.`);
   if (one('SELECT 1 FROM users WHERE username=?', username)) return bad(res, "That username's taken. Try another.");
   const isFirst = !one('SELECT 1 FROM users LIMIT 1');
   const isAdmin = isFirst || config.admins.includes(username.toLowerCase()) ? 1 : 0;
   const avatar = JSON.stringify(req.body.avatar && typeof req.body.avatar === 'object' ? sanitizeAvatar(req.body.avatar) : randomAvatar());
-  const { lastInsertRowid: id } = run('INSERT INTO users (username, display_name, pass_hash, avatar, is_admin, created_at) VALUES (?,?,?,?,?,?)',
-    username, displayName || username, hashPassword(password), avatar, isAdmin, now());
+  const { lastInsertRowid: id } = run('INSERT INTO users (username, display_name, pass_hash, avatar, is_admin, created_at, agreed_at) VALUES (?,?,?,?,?,?,?)',
+    username, displayName || username, hashPassword(password), avatar, isAdmin, now(), now());
   createSession(res, Number(id));
   const events = touchStreak(Number(id));
   res.json(meResponse(one('SELECT * FROM users WHERE id=?', id), events));
@@ -300,6 +305,7 @@ function saveCover(file, slug) {
 }
 
 api.post('/upload', requireUser, uploadGate, upload.fields([{ name: 'file', maxCount: 1 }, { name: 'cover', maxCount: 1 }]), wrap(async (req, res) => {
+  if (String(req.body.rights) !== '1') throw new UploadError('Tick the box to confirm the game is yours to share.');
   const fields = readGameFields(req.body);
   const kind = String(req.body.kind || '');
   const file = req.files?.file?.[0];
@@ -328,6 +334,10 @@ api.patch('/games/:slug', requireUser, coverUpload.single('cover'), (req, res) =
   if (!g || !canEdit(req.user, g)) return bad(res, "Can't find that game.", 404);
   const f = readGameFields(req.body, true);
   if (req.body.status && ['live', 'hidden'].includes(req.body.status)) f.status = req.body.status;
+  if (g.taken_down && f.status === 'live') {
+    if (!req.user.is_admin) return bad(res, `This game was taken down after a report, so it can't go live again from here. Email ${contactEmail()} if you think that's a mistake.`, 403);
+    f.taken_down = 0;
+  }
   if (req.user.is_admin && req.body.featured != null) f.featured = String(req.body.featured) === '1' || req.body.featured === true ? 1 : 0;
   if (req.file) f.cover = saveCover(req.file, g.slug);
   if (req.body.removeCover === '1') f.cover = null;
@@ -402,6 +412,74 @@ api.get('/hall-of-fame', (_req, res) => {
     race: standings(month, 10).map(r => ({ game: awardGame(r), avg: r.avg, votes: r.votes, score: r.score, eligible: r.eligible })),
     past: pastWinners(24).map(m => ({ month: m.month, winners: m.winners.map(w => ({ place: w.place, game: { ...awardGame(w), live: w.status === 'live' }, avg: w.avg, votes: w.votes })) })),
   });
+});
+
+// ---------- reports & moderation ----------
+const reportSeen = new Map();
+api.post('/reports', (req, res) => {
+  const kind = req.body.kind === 'comment' ? 'comment' : 'game';
+  const who = req.user ? `u${req.user.id}` : ip(req);
+  if (!rateLimit(`report:${who}`, req.user ? 20 : 6, 3600e3)) return bad(res, "That's a lot of reports. Try again in a bit, or email us.", 429);
+  let game, comment;
+  if (kind === 'comment') {
+    comment = one('SELECT c.id, c.body, c.game_id, c.user_id, u.username FROM comments c JOIN users u ON u.id=c.user_id WHERE c.id=?', Number(req.body.commentId));
+    if (!comment) return bad(res, 'That comment is already gone.', 404);
+    if (req.user?.id === comment.user_id) return bad(res, "That's your own comment. You can just delete it.");
+    game = one('SELECT * FROM games WHERE id=?', comment.game_id);
+  } else {
+    game = findGame(String(req.body.slug || ''), req.user);
+    if (!game) return bad(res, "Can't find that game.", 404);
+  }
+  // One report per person per thing per day is plenty; repeats get a friendly "got it".
+  const key = `${who}:${kind}:${comment?.id || game.id}`, t = Date.now();
+  if (t - (reportSeen.get(key) || 0) < 864e5) return res.json({ ok: true, duplicate: true });
+  try {
+    createReport({ kind, game, comment, reason: req.body.reason, details: req.body.details, contact: req.body.contact, reporterId: req.user?.id });
+  } catch (e) { if (e instanceof ReportError) return bad(res, e.message); throw e; }
+  if (reportSeen.size > 50000) reportSeen.clear();
+  reportSeen.set(key, t);
+  res.json({ ok: true });
+});
+
+const requireAdmin = (req, res, next) => req.user?.is_admin ? next() : bad(res, 'Not found.', 404);
+api.get('/admin/reports', requireUser, requireAdmin, (req, res) => {
+  const status = req.query.status === 'closed' ? 'closed' : 'open';
+  res.json({ status, open: openReportCount(), items: listReports(status).map(r => ({
+    id: r.id, kind: r.kind, reason: r.reason, details: r.details, contact: r.contact, snapshot: r.snapshot, status: r.status,
+    createdAt: r.created_at, resolvedAt: r.resolved_at, resolver: r.resolver_username, reporter: r.reporter_username, openSame: r.open_same,
+    commentExists: !!r.comment_exists,
+    game: r.slug ? { slug: r.slug, title: r.title, status: r.game_status, takenDown: !!r.taken_down, author: r.author_username, builtin: r.game_kind === 'builtin' } : null,
+  })) });
+});
+api.post('/admin/reports/:id', requireUser, requireAdmin, (req, res) => {
+  try { resolveReport(Number(req.params.id), String(req.body.action || ''), req.user); }
+  catch (e) { if (e instanceof ReportError) return bad(res, e.message); throw e; }
+  clearSitemapCache();
+  res.json({ ok: true, open: openReportCount() });
+});
+
+// ---------- legal & your data ----------
+api.get('/legal/:page', (req, res) => {
+  const p = legalPage(req.params.page);
+  if (!p) return bad(res, 'No such page.', 404);
+  res.json(p);
+});
+
+api.get('/me/export', requireUser, (req, res) => {
+  res.set('Content-Disposition', `attachment; filename="${config.siteName.toLowerCase()}-${req.user.username}-data.json"`);
+  res.json(exportData(req.user.id));
+});
+
+api.post('/me/delete', requireUser, (req, res) => {
+  const u = req.user;
+  if (!rateLimit(`delete:${u.id}`, 5, 600e3)) return bad(res, 'Too many tries. Give it a few minutes.', 429);
+  const password = String(req.body.password || '');
+  if (password.length > PASSWORD_MAX || !verifyPassword(password, u.pass_hash)) return bad(res, "That password isn't right.", 401);
+  if (u.is_admin && one('SELECT COUNT(*) n FROM users WHERE is_admin=1').n < 2) return bad(res, "You're the only admin. Make someone else an admin first (ADMIN_USERNAMES), then try again.", 403);
+  destroySession(req, res);
+  deleteAccount(u.id);
+  clearSitemapCache();
+  res.json({ ok: true });
 });
 
 // ---------- people ----------

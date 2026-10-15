@@ -8,6 +8,7 @@ import path from 'node:path';
 import { config } from './config.js';
 import { one, all } from './db.js';
 import { CATEGORIES } from './uploads.js';
+import { legalPage, LEGAL_UPDATED } from './legal.js';
 import { listComments, standings, pastWinners, monthOf, RATING_LABELS } from './community.js';
 
 export const CATEGORY_INFO = {
@@ -152,7 +153,14 @@ function pageFor(pathname, query) {
     description: `Put your browser game on ${NAME()}. HTML5 zip, a single HTML file, a GitHub repo, Unity WebGL or a hosted link.`,
     body: '<h1>Upload your game</h1>',
   };
-  const simple = { '/login': 'Sign in', '/signup': 'Create an account', '/settings': 'Edit profile' }[pathname];
+  if ((m = pathname.match(/^\/(terms|privacy)$/))) {
+    const l = legalPage(m[1]);
+    return {
+      title: `${l.title} · ${NAME()}`, canonical: pathname, description: l.description,
+      body: `<h1>${esc(l.title)}</h1><p><small>Last updated ${esc(l.updatedText)}</small></p><div class="legal-body">${l.html}</div>`,
+    };
+  }
+  const simple = { '/login': 'Sign in', '/signup': 'Create an account', '/settings': 'Settings', '/admin/reports': 'Reports' }[pathname];
   if (simple) return { title: `${simple} · ${NAME()}`, canonical: pathname, noindex: true, description: HOME_DESC, body: `<h1>${simple}</h1>` };
   return null;
 }
@@ -225,7 +233,7 @@ export function renderPage(req) {
 
 // ---------- robots + sitemap ----------
 export function robots() {
-  return `User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: ${abs('/sitemap.xml')}\n`;
+  return `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /admin/\n\nSitemap: ${abs('/sitemap.xml')}\n`;
 }
 
 let sitemapCache = { at: 0, xml: '' };
@@ -234,7 +242,7 @@ export function sitemap() {
   const day = ts => new Date(ts).toISOString().slice(0, 10);
   const latest = one(`SELECT MAX(updated_at) t FROM games g WHERE ${LIVE}`).t || Date.now();
   const lastAward = one('SELECT MAX(finalized_at) t FROM monthly_results').t;
-  const urls = [['/', latest], ['/games', latest], ['/hall-of-fame', lastAward], ['/leaderboard', null]];
+  const urls = [['/', latest], ['/games', latest], ['/hall-of-fame', lastAward], ['/leaderboard', null], ['/terms', Date.parse(LEGAL_UPDATED)], ['/privacy', Date.parse(LEGAL_UPDATED)]];
   for (const r of all(`SELECT category, MAX(updated_at) t FROM games g WHERE ${LIVE} GROUP BY category`)) urls.push([`/games/${r.category}`, r.t]);
   for (const g of all(`SELECT slug, updated_at FROM games g WHERE ${LIVE} ORDER BY plays DESC LIMIT 45000`)) urls.push([`/game/${g.slug}`, g.updated_at]);
   for (const u of all(`SELECT u.username, MAX(g.updated_at) t FROM users u JOIN games g ON g.author_id=u.id WHERE ${LIVE} GROUP BY u.id LIMIT 4000`)) urls.push([`/u/${u.username}`, u.t]);

@@ -15,6 +15,13 @@ No build step and no native dependencies: Node 22.13+ (uses the built-in SQLite)
 - **Comments** on every game. The author, the game's owner and admins can delete them, and there are spam limits.
 - **Hall of Fame** (`/hall-of-fame`): a live race for the current month and podiums for past months. Months lock in automatically within an hour of ending (UTC), using a weighted average with a 3-rating minimum. The winning maker gets 500 XP and the Game of the Month badge.
 
+## Legal and moderation
+
+- `/terms` and `/privacy` are generated from `server/legal.js`, using `CONTACT_EMAIL`, `OPERATOR_NAME` and `LEGAL_COUNTRY`. They're a starting point, not legal advice.
+- Sign-up requires ticking an age (16+) and Terms box; uploads require confirming the uploader has the rights.
+- Every game and comment has a **Report** button (no account needed for games). Admins review them at `/admin/reports` (linked in the profile menu with a count): take a game down (hidden and locked so the uploader can't re-publish), delete a comment, dismiss, or restore. Closed reports are deleted after a year.
+- Settings has **Download my data** (JSON export) and **Delete account** (removes the account, its games and files, comments, ratings, scores and XP).
+
 ## Quick start
 
 ```bash
@@ -108,6 +115,9 @@ docker run -p 8080:8080 -v snackbar-data:/data \
 | `GAMES_ORIGIN` | `http://localhost:8081` | Public URL games are served from — must differ from the site |
 | `DATA_DIR` | `./data` | Database, uploads, covers |
 | `ADMIN_USERNAMES` | | Comma-separated admin usernames (the first account is always admin) |
+| `CONTACT_EMAIL` | `hello@<your domain>` | Contact address shown in the Terms, Privacy Policy and takedown messages |
+| `OPERATOR_NAME` | | Who runs the site (your name or company), shown in the Terms and Privacy Policy |
+| `LEGAL_COUNTRY` | `Cyprus` | Governing law and data-protection authority named in the legal pages |
 | `GITHUB_TOKEN` | | For private repos / higher rate limits on imports |
 | `SITE_NAME` | Snackbar | Rename the site |
 | `MAX_UPLOAD_MB` | 95 | Biggest upload accepted |

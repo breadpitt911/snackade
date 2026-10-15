@@ -7,10 +7,14 @@ import { createGameHost } from './gamehost.js';
 import { seedBuiltinGames } from './seed.js';
 import { renderPage, robots, sitemap } from './seo.js';
 import { finalizeMonths } from './community.js';
+import { purgeOldReports } from './moderation.js';
 
 const seeded = seedBuiltinGames();
 // Lock in Game of the Month for any month that has ended, now and then hourly.
-const decideMonths = () => { try { finalizeMonths(console.log); } catch (e) { console.error('monthly awards failed', e); } };
+const decideMonths = () => {
+  try { finalizeMonths(console.log); } catch (e) { console.error('monthly awards failed', e); }
+  try { purgeOldReports(); } catch (e) { console.error('report cleanup failed', e); }
+};
 decideMonths();
 setInterval(decideMonths, 60 * 60e3).unref();
 const gameHost = createGameHost();

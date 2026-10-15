@@ -61,6 +61,10 @@ SITE_ORIGIN=https://$DOMAIN
 GAMES_ORIGIN=https://$GAMES_DOMAIN
 DATA_DIR=$DATA
 ADMIN_USERNAMES=$ADMINS
+# Shown in the Terms and Privacy Policy
+CONTACT_EMAIL=hello@$DOMAIN
+# OPERATOR_NAME=Your Name
+LEGAL_COUNTRY=Cyprus
 # GITHUB_TOKEN=   # optional: higher GitHub rate limits for repo imports
 EOF
   chmod 640 "$ENVF"; chgrp snackbar "$ENVF"

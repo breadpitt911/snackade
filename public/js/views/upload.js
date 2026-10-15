@@ -45,6 +45,7 @@ export async function render(root) {
         </div>
         <div class="field"><label for="u-tags">Tags</label><input id="u-tags" name="tags" placeholder="retro, puzzle, two-player"><span class="hint">Up to 8, with commas between them.</span></div>
         <div class="field"><label for="u-cover">Cover image (optional)</label><input id="u-cover" type="file" accept="image/png,image/jpeg,image/webp,image/gif"><span class="hint">4:3 looks best. Skip it and we'll make you one.</span></div>
+        <label class="check"><input type="checkbox" name="rights" value="1" id="u-rights"><span>I made this game or have permission to share all of it (code, art, music), and it follows the <a href="/terms#content" target="_blank">upload rules</a>.</span></label>
         <div id="u-msg"></div>
         <div id="u-prog" hidden><div class="progress"><i></i></div><p class="muted" id="u-prog-t" style="margin-top:6px">Uploading…</p></div>
         <div><button class="btn primary big" id="u-go">${icon('upload')}Publish it</button></div>
@@ -113,6 +114,7 @@ export async function render(root) {
     if (KINDS[kind].file && !file) return fail(`You forgot the ${kind === 'html' ? '.html' : '.zip'} file.`);
     if (kind === 'github' && !/github\.com\/[^/]+\/[^/]+/.test($('#u-repo').value)) return fail('That needs to be a GitHub link, like https://github.com/you/your-game');
     if (kind === 'embed' && !/^https:\/\//.test($('#u-url').value)) return fail('Hosted games need an https:// link.');
+    if (!$('#u-rights').checked) return fail('Tick the box to confirm the game is yours to share.');
 
     const fd = new FormData(form);
     fd.set('kind', kind);

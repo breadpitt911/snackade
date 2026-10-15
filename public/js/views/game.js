@@ -1,6 +1,7 @@
 import { api, apiUpload, state, esc, icon, fmt, compact, ago, avatarHtml, toast, toastError, modal, go, requireLogin, title } from '../core.js';
 import { shelf, catChip, coverHtml } from '../components.js';
 import { CAT_NAMES, bite } from '../art.js';
+import { reportModal } from '../report.js';
 
 
 const KIND_LABEL = { builtin: 'Snackbar original', html: 'Single HTML file', html5: 'HTML5 game', github: 'Straight from GitHub', unity: 'Unity WebGL', embed: 'Hosted elsewhere' };
@@ -36,11 +37,12 @@ export async function render(root, [slug]) {
           <div style="display:flex;gap:8px;flex-wrap:wrap">${catChip(g.category)}
             ${d.canEdit ? `<button class="btn small" id="edit">${icon('edit')}Edit</button>` : ''}</div>
         </div>
-        ${g.status === 'hidden' ? '<div class="err">This one\'s hidden. Only you and the admins can see it right now.</div>' : ''}
+        ${g.takenDown ? `<div class="err">This game was taken down after a report and only you and the admins can see it. If you think that's a mistake, email ${esc(state.meta.contactEmail)} and tell us why.</div>` : g.status === 'hidden' ? '<div class="err">This one\'s hidden. Only you and the admins can see it right now.</div>' : ''}
         ${g.description ? `<p class="desc">${esc(g.description)}</p>` : ''}
         ${g.instructions ? `<div class="howto"><h3>How to play</h3><p>${esc(g.instructions)}</p></div>` : ''}
         ${g.tags.length ? `<div class="tags">${g.tags.map(t => `<a href="/games?q=${encodeURIComponent(t)}">#${esc(t)}</a>`).join('')}</div>` : ''}
         ${g.sourceUrl ? `<p class="muted" style="display:flex;gap:6px;align-items:center">${icon(g.kind === 'github' ? 'github' : 'link', 16)}<a href="${esc(g.sourceUrl)}" target="_blank" rel="noopener noreferrer">${g.kind === 'github' ? 'View source on GitHub' : 'Original site'}</a></p>` : ''}
+        ${d.canEdit && !state.me?.isAdmin ? '' : `<p class="report-row"><button class="linkbtn" id="report">${icon('flag', 15)}Report this game</button></p>`}
       </div>
       <section class="comments" id="comments" aria-labelledby="c-head"></section>
     </div>
@@ -124,6 +126,7 @@ export async function render(root, [slug]) {
   document.addEventListener('visibilitychange', onVis);
 
   root.querySelector('#edit')?.addEventListener('click', () => editModal(g));
+  root.querySelector('#report')?.addEventListener('click', () => reportModal({ kind: 'game', slug: g.slug, what: g.title }));
 
   // ---------- Snack Score ----------
   const ratingEl = root.querySelector('#rating');
@@ -191,6 +194,8 @@ export async function render(root, [slug]) {
   });
   // Delete is a two-step button: first click arms it, second click deletes.
   list.addEventListener('click', async e => {
+    const rep = e.target.closest('[data-report]');
+    if (rep) return reportModal({ kind: 'comment', commentId: +rep.dataset.report, what: 'this comment' });
     const btn = e.target.closest('[data-del]');
     if (!btn) return;
     if (!btn.classList.contains('armed')) { btn.classList.add('armed'); btn.textContent = 'Sure? Delete'; setTimeout(() => { btn.classList.remove('armed'); btn.textContent = 'Delete'; }, 4000); return; }
@@ -227,7 +232,7 @@ function commentHtml(c) {
     <div class="cbody"><div class="cmeta"><a href="/u/${esc(c.user.username)}">${esc(c.user.displayName)}</a><span class="lvl">Lv ${c.user.level}</span>
       ${c.stars ? `<span class="crated" title="Rated it ${c.stars}/5: ${esc(labels[c.stars])}">${bite(true, 14)}${c.stars}/5</span>` : ''}
       <time class="muted" datetime="${new Date(c.createdAt).toISOString()}">${ago(c.createdAt)}</time>
-      ${c.canDelete ? `<button class="cdel" data-del="${c.id}">Delete</button>` : ''}</div>
+      <span class="cacts">${c.canReport ? `<button class="cdel" data-report="${c.id}">Report</button>` : ''}${c.canDelete ? `<button class="cdel" data-del="${c.id}">Delete</button>` : ''}</span></div>
     <p>${esc(c.body)}</p></div></li>`;
 }
 

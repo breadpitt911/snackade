@@ -1,4 +1,4 @@
-import { api, state, esc, avatar, setMe, toast, go, title, requireLogin } from '../core.js';
+import { api, state, esc, avatar, setMe, toast, toastError, go, title, requireLogin } from '../core.js';
 import { AV_COLORS } from '../art.js';
 
 export async function render(root) {
@@ -10,7 +10,7 @@ export async function render(root) {
 
   root.innerHTML = `<div class="wrap" style="max-width:760px">
     <div class="page-head"><h1 style="font-size:clamp(2rem,4vw,3rem)">Make it yours</h1><p>Build your little guy and write a bio. The bio's worth ${state.meta.rules.profile.xp} XP the first time.</p></div>
-    <form id="pf" class="panel form-grid" style="margin-bottom:50px">
+    <form id="pf" class="panel form-grid" style="margin-bottom:24px">
       <div class="av-builder">
         <div id="av-big" style="border:2.5px solid var(--ink);border-radius:30px;overflow:hidden;box-shadow:var(--shadow)"></div>
         <div class="opts">${OPTS.map(([k, label, n]) => `<div class="opt-row" role="group" aria-label="${label}"><span>${label}</span>${Array.from({ length: n }, (_, i) => `<button type="button" data-k="${k}" data-v="${i}" aria-label="${label} ${i + 1}">${k === 'color' ? `<span style="display:block;width:100%;height:100%;border-radius:6px;background:${AV_COLORS[i]}"></span>` : avatar({ ...av, [k]: i })}</button>`).join('')}</div>`).join('')}
@@ -19,7 +19,20 @@ export async function render(root) {
       <div class="field"><label for="p-name">Display name</label><input id="p-name" name="displayName" maxlength="32" value="${esc(me.displayName)}"></div>
       <div class="field"><label for="p-bio">Bio</label><textarea id="p-bio" name="bio" maxlength="280" placeholder="What you play, what you're building, a high score you're weirdly proud of…">${esc(me.bio || '')}</textarea></div>
       <div style="display:flex;gap:10px"><button class="btn primary">Save</button><a class="btn ghost" href="/u/${esc(me.username)}">Never mind</a></div>
-    </form></div>`;
+    </form>
+    <section class="panel danger-zone" aria-labelledby="data-h">
+      <h2 id="data-h">Your data</h2>
+      <p class="muted">Grab a copy of everything we have on you, or wipe your account. Details in the <a href="/privacy">Privacy Policy</a>.</p>
+      <div class="dz-row"><div><b>Download my data</b><p class="muted">Your profile, games, comments, ratings, scores and XP history as a JSON file.</p></div>
+        <button type="button" class="btn" id="export">Download</button></div>
+      <div class="dz-row"><div><b>Delete account</b><p class="muted">Deletes your account, your games, comments, ratings, scores and XP straight away. No undo.</p></div>
+        <button type="button" class="btn danger" id="del-open">Delete account</button></div>
+      <form id="del-form" class="form-grid" hidden>
+        <div class="field"><label for="del-pass">Type your password to confirm</label><input id="del-pass" type="password" autocomplete="current-password" required></div>
+        <div id="del-err" role="alert"></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn danger">Delete everything for good</button><button type="button" class="btn ghost" id="del-cancel">Keep my account</button></div>
+      </form>
+    </section></div>`;
 
   const paint = () => {
     root.querySelector('#av-big').innerHTML = avatar(av);
@@ -31,6 +44,30 @@ export async function render(root) {
   root.querySelectorAll('[data-k]').forEach(b => b.addEventListener('click', () => { av[b.dataset.k] = +b.dataset.v; paint(); }));
   root.querySelector('#shuffle').addEventListener('click', () => { for (const [k, , n] of OPTS) av[k] = Math.floor(Math.random() * n); paint(); });
   paint();
+
+  root.querySelector('#export').addEventListener('click', async e => {
+    const btn = e.currentTarget; btn.disabled = true;
+    try {
+      const res = await fetch('/api/me/export', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Could not build your export. Try again in a bit.');
+      const url = URL.createObjectURL(await res.blob());
+      const a = Object.assign(document.createElement('a'), { href: url, download: `${state.meta.siteName.toLowerCase()}-${me.username}-data.json` });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10e3);
+    } catch (err) { toastError(err.message); }
+    btn.disabled = false;
+  });
+  const delForm = root.querySelector('#del-form');
+  root.querySelector('#del-open').addEventListener('click', () => { delForm.hidden = false; root.querySelector('#del-pass').focus(); });
+  root.querySelector('#del-cancel').addEventListener('click', () => { delForm.hidden = true; root.querySelector('#del-pass').value = ''; });
+  delForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = delForm.querySelector('button.danger'); btn.disabled = true;
+    try {
+      await api('/me/delete', { method: 'POST', body: { password: root.querySelector('#del-pass').value } });
+      setMe(null); go('/'); toast('Account deleted. Sorry to see you go.', { pip: '👋' });
+    } catch (err) { root.querySelector('#del-err').innerHTML = `<div class="err">${esc(err.message)}</div>`; btn.disabled = false; }
+  });
 
   root.querySelector('#pf').addEventListener('submit', async e => {
     e.preventDefault();

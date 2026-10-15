@@ -73,7 +73,22 @@ Open `https://snackbar.games` and **sign up straight away. The first account is 
 - In the tunnel, point routes at `http://127.0.0.1:8080` rather than `localhost:8080` (avoids IPv6 surprises).
 - Only run `cloudflared` on the server. A copy running anywhere else (like your laptop) joins the same tunnel and causes random 502 errors.
 
-## 6. Tell search engines
+## 6. Contact email and legal details
+
+The Terms and Privacy Policy show a contact address for takedowns and privacy requests. Set it up:
+
+1. In Cloudflare, open **snackbar.games → Email → Email Routing**, turn it on (it adds the DNS records for you), and create `hello@snackbar.games` forwarding to your real inbox. Free.
+2. On the server, add your details to the env file, then restart:
+   ```bash
+   sudo nano /etc/snackbar.env
+   # add or edit:
+   # CONTACT_EMAIL=hello@snackbar.games
+   # OPERATOR_NAME=Your Name
+   # LEGAL_COUNTRY=Cyprus
+   sudo systemctl restart snackbar
+   ```
+
+## 7. Tell search engines
 
 Add the site to Google Search Console and Bing Webmaster Tools and submit `https://snackbar.games/sitemap.xml`. The full list is in [docs/SEO.md](docs/SEO.md).
 

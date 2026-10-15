@@ -140,6 +140,32 @@ CREATE TABLE IF NOT EXISTS monthly_awards (
   if (!cols.has('comment_count')) db.exec('ALTER TABLE games ADD COLUMN comment_count INTEGER NOT NULL DEFAULT 0');
 }
 
+// ---------- moderation, legal ----------
+db.exec(`
+CREATE TABLE IF NOT EXISTS reports (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL,                 -- game | comment
+  game_id INTEGER REFERENCES games(id) ON DELETE CASCADE,
+  comment_id INTEGER,                 -- no FK: the comment may be deleted while the report is kept
+  snapshot TEXT NOT NULL DEFAULT '',  -- game title or comment text at report time
+  reason TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  contact TEXT NOT NULL DEFAULT '',
+  reporter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'open', -- open | actioned | dismissed
+  created_at INTEGER NOT NULL,
+  resolved_at INTEGER,
+  resolved_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS reports_status ON reports(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS reports_game ON reports(game_id);
+`);
+{
+  const has = (t, c) => db.prepare(`PRAGMA table_info(${t})`).all().some(x => x.name === c);
+  if (!has('users', 'agreed_at')) db.exec('ALTER TABLE users ADD COLUMN agreed_at INTEGER');
+  if (!has('games', 'taken_down')) db.exec('ALTER TABLE games ADD COLUMN taken_down INTEGER NOT NULL DEFAULT 0');
+}
+
 export const one = (sql, ...p) => db.prepare(sql).get(...p);
 export const all = (sql, ...p) => db.prepare(sql).all(...p);
 export const run = (sql, ...p) => db.prepare(sql).run(...p);

@@ -18,6 +18,7 @@ export async function render(root, [mode], qs) {
       <div class="field"><label for="a-user">Username</label><input id="a-user" name="username" autocomplete="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" autofocus>${signup ? '<span class="hint">3–20 letters, numbers or underscores. It\'s also your profile link.</span>' : ''}</div>
       ${signup ? '<div class="field"><label for="a-name">Display name</label><input id="a-name" name="displayName" maxlength="32" placeholder="What should people call you?"></div>' : ''}
       <div class="field"><label for="a-pass">Password</label><input id="a-pass" name="password" type="password" autocomplete="${signup ? 'new-password' : 'current-password'}" required minlength="${signup ? 8 : 1}">${signup ? '<span class="hint">8 characters or more.</span>' : ''}</div>
+      ${signup ? `<label class="check"><input type="checkbox" name="agree" required><span>I'm ${state.meta.minAge} or older and I agree to the <a href="/terms" target="_blank">Terms</a> and <a href="/privacy" target="_blank">Privacy Policy</a>.</span></label>` : ''}
       <div id="a-err"></div>
       <button class="btn primary big">${signup ? 'Let\'s go' : 'Sign in'}</button>
     </form>
@@ -32,7 +33,7 @@ export async function render(root, [mode], qs) {
     btn.disabled = true;
     try {
       const body = { username: f.username.value.trim(), password: f.password.value };
-      if (signup) { body.displayName = f.displayName.value.trim(); body.avatar = av; }
+      if (signup) { body.displayName = f.displayName.value.trim(); body.avatar = av; body.agree = f.agree.checked; }
       const r = await api(signup ? '/auth/signup' : '/auth/login', { method: 'POST', body });
       setMe(r.user);
       go(next, { replace: true });

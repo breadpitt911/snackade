@@ -12,6 +12,8 @@ const ROUTES = [
   [/^\/leaderboard\/?$/, () => import('./views/leaderboard.js')],
   [/^\/hall-of-fame\/?$/, () => import('./views/halloffame.js')],
   [/^\/(login|signup)\/?$/, () => import('./views/auth.js')],
+  [/^\/(terms|privacy)\/?$/, () => import('./views/legal.js')],
+  [/^\/admin\/reports\/?$/, () => import('./views/admin.js')],
 ];
 
 const main = document.getElementById('main');
@@ -81,7 +83,7 @@ function toggleMenu() {
   menuEl = document.createElement('div');
   menuEl.className = 'menu'; menuEl.setAttribute('role', 'menu');
   menuEl.innerHTML = `<div class="menu-head" role="none"><b>${esc(me.displayName)}</b><small>@${esc(me.username)} · Level ${me.progress.level}</small></div>
-    <a role="menuitem" href="/u/${esc(me.username)}">Your profile</a><a role="menuitem" href="/settings">Edit profile</a><a role="menuitem" href="/upload">Upload your game</a><a role="menuitem" href="/hall-of-fame">Hall of Fame</a><hr role="none"><button role="menuitem" id="logout">Sign out</button>`;
+    <a role="menuitem" href="/u/${esc(me.username)}">Your profile</a><a role="menuitem" href="/settings">Edit profile</a><a role="menuitem" href="/upload">Upload your game</a><a role="menuitem" href="/hall-of-fame">Hall of Fame</a>${me.isAdmin ? `<a role="menuitem" href="/admin/reports">Reports${me.openReports ? ` <span class="count">${me.openReports}</span>` : ''}</a>` : ''}<hr role="none"><button role="menuitem" id="logout">Sign out</button>`;
   document.querySelector('#topbar .me').appendChild(menuEl);
   $('#avatar-btn')?.setAttribute('aria-expanded', 'true');
   menuEl.querySelector('#logout').addEventListener('click', async () => { await api('/auth/logout', { method: 'POST' }); setMe(null); closeMenu(); go('/'); });
@@ -97,7 +99,7 @@ function renderFooter() {
   applyTheme(theme);
   document.getElementById('foot').innerHTML = `<div class="wrap">
     <div style="display:flex;align-items:center;gap:10px">${logo(30)}<span>Games for when you've got five minutes. Or five hours.</span></div>
-    <nav aria-label="Footer"><a href="/games">Games</a><a href="/upload">Upload</a><a href="/hall-of-fame">Hall of Fame</a><a href="/leaderboard">Leaderboard</a><a href="/leaderboard#xp">How XP works</a></nav>
+    <nav aria-label="Footer"><a href="/games">Games</a><a href="/upload">Upload</a><a href="/hall-of-fame">Hall of Fame</a><a href="/leaderboard">Leaderboard</a><a href="/leaderboard#xp">How XP works</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a></nav>
     <button class="theme-toggle" id="theme">Theme: ${theme}</button></div>`;
   $('#theme').addEventListener('click', () => {
     const next = { auto: 'light', light: 'dark', dark: 'auto' }[document.documentElement.dataset.themeChoice || 'auto'];
