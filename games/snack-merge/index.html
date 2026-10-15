@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Snack Merge</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#fff1dc}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 480, H: 640 }), { ctx, C } = K, W = 480, H = 640;
+const N = 4, CELL = 100, GAP = 10, BX = (W - (N * CELL + (N + 1) * GAP)) / 2, BY = 176, SLIDE = .11;
+const TIERS = [null,
+  ['Crumb', '#fff4e0', 'crumb'], ['Berry', '#ffd6dc', 'berry'], ['Cherry', '#ffb3c1', 'cherry'], ['Cookie', '#ffe1a8', 'cookie'],
+  ['Candy', '#e2d4ff', 'candy'], ['Pretzel', '#f7c99b', 'pretzel'], ['Donut', '#ffc1df', 'donut'], ['Taco', '#ffe58a', 'taco'],
+  ['Pizza', '#ffc988', 'pizza'], ['Burger', '#ffb07a', 'burger'], ['Cake', '#ff9ccf', 'cake'], ['Sundae', '#b39dff', 'icecream'], ['Feast', '#8e6cf0', 'watermelon']];
+let state = 'menu', tiles, score, best, moving = 0, queued = null, won = false, banner = 0, nextId = 1, endAt = 0, topTier = 1, moves = 0;
+
+const pos = (r, c) => ({ x: BX + GAP + c * (CELL + GAP), y: BY + GAP + r * (CELL + GAP) });
+function newGame() {
+  tiles = []; score = 0; won = false; topTier = 1; moves = 0; moving = 0; queued = null;
+  spawn(); spawn(); state = 'play'; K.playing = true; best = K.best('merge');
+}
+function at(r, c) { return tiles.find(t => !t.dying && t.r === r && t.c === c); }
+function spawn() {
+  const free = []; for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (!at(r, c)) free.push([r, c]);
+  if (!free.length) return;
+  const [r, c] = K.pick(free);
+  tiles.push({ id: nextId++, r, c, fr: r, fc: c, k: Math.random() < .9 ? 1 : 2, born: K.t, pop: 0 });
+}
+function canMove() {
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const t = at(r, c); if (!t) return true;
+    const a = at(r, c + 1), b = at(r + 1, c);
+    if ((a && a.k === t.k) || (b && b.k === t.k)) return true;
+  }
+  return false;
+}
+function move(dir) {
+  if (state !== 'play') return;
+  if (moving > 0) { queued = dir; return; }
+  const [dr, dc] = { up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1] }[dir];
+  tiles = tiles.filter(t => !t.dying);
+  tiles.forEach(t => { t.fr = t.r; t.fc = t.c; t.merged = false; });
+  const order = [...tiles].sort((a, b) => dr ? (dr > 0 ? b.r - a.r : a.r - b.r) : (dc > 0 ? b.c - a.c : a.c - b.c));
+  let moved = false, gained = 0;
+  for (const t of order) {
+    let r = t.r, c = t.c;
+    for (;;) {
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nc < 0 || nr >= N || nc >= N) break;
+      const o = at(nr, nc);
+      if (!o) { r = nr; c = nc; continue; }
+      if (o.k === t.k && !o.merged && !t.merged) {
+        t.dying = true; t.r = nr; t.c = nc; o.k++; o.merged = true; o.pop = K.t + SLIDE;
+        gained += 2 ** o.k; topTier = Math.max(topTier, o.k);
+        moved = true; r = null;
+      }
+      break;
+    }
+    if (r !== null && (r !== t.r || c !== t.c)) { t.r = r; t.c = c; moved = true; }
+  }
+  if (!moved) { K.sfx(150, .05, 'triangle', .02); return; }
+  moves++; score += gained; moving = SLIDE;
+  K.sfx(gained ? 300 + Math.min(900, gained) : 220, .06, gained ? 'square' : 'triangle', gained ? .04 : .02);
+  if (gained >= 64) K.burst(W / 2, BY - 30, 10, [C.lemon, C.gum, C.mint], 150, .5, 3);
+  setTimeout(() => {
+    spawn();
+    if (topTier >= 11 && !won) { won = true; banner = K.t + 2.4; K.jingle([523, 659, 784, 1046, 1318], 100, 'square', .04); }
+    if (!canMove()) { state = 'over'; endAt = K.t; K.playing = false; K.saveBest('merge', score); K.submit(score); K.sfx(180, .5, 'sawtooth', .05, -100); }
+  }, SLIDE * 1000);
+}
+
+function update(dt) {
+  if (moving > 0) { moving -= dt; if (moving <= 0) { tiles = tiles.filter(t => !t.dying); if (queued) { const q = queued; queued = null; move(q); } } }
+  if (state !== 'play') return;
+  if (K.hit('ArrowUp', 'KeyW')) move('up'); else if (K.hit('ArrowDown', 'KeyS')) move('down');
+  else if (K.hit('ArrowLeft', 'KeyA')) move('left'); else if (K.hit('ArrowRight', 'KeyD')) move('right');
+  const sw = K.swipe(26); if (sw) move(sw);
+}
+
+function drawTile(t) {
+  const p = Math.min(1, 1 - Math.max(0, moving) / SLIDE);
+  const e = K.ease(p);
+  const a = pos(t.fr, t.fc), b = pos(t.r, t.c);
+  const x = K.lerp(a.x, b.x, e), y = K.lerp(a.y, b.y, e);
+  let s = 1;
+  const age = K.t - t.born; if (age < .2) s = K.back(age / .2);
+  if (t.pop && K.t > t.pop && K.t < t.pop + .18) s = 1 + Math.sin((K.t - t.pop) / .18 * Math.PI) * .14;
+  const tier = TIERS[Math.min(t.k, TIERS.length - 1)];
+  ctx.save(); ctx.translate(x + CELL / 2, y + CELL / 2); ctx.scale(s, s);
+  ctx.fillStyle = 'rgba(21,19,31,.18)'; K.rr(-CELL / 2 + 3, -CELL / 2 + 5, CELL, CELL, 16); ctx.fill();
+  ctx.fillStyle = tier[1]; K.rr(-CELL / 2, -CELL / 2, CELL, CELL, 16); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+  const dk = t.dying || (t.merged && K.t < t.pop) ? t.k - (t.merged ? 1 : 0) : t.k;
+  const tr = TIERS[Math.min(dk, TIERS.length - 1)];
+  K.snack(tr[2], 0, -10, 24);
+  const val = 2 ** dk;
+  K.text(val >= 1000 ? (val / 1000) + 'k' : String(val), 0, 33, 18, C.ink, 'center', 800, false);
+  K.text(tr[0], CELL / 2 - 8, -CELL / 2 + 12, 10, 'rgba(21,19,31,.6)', 'right', 800, false);
+  ctx.restore();
+}
+
+function draw() {
+  ctx.fillStyle = '#fff1dc'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,201,60,.18)'; for (let i = 0; i < 8; i++) K.circle((i * 131) % W, 40 + (i * 89) % H, 30 + (i % 3) * 18, 'rgba(255,93,162,.06)');
+  K.text('Snack Merge', 26, 50, 32, C.ink, 'left', 800, false);
+  K.text('Match two to cook something better', 26, 82, 13, '#6a5f86', 'left', 700, false);
+  if (state === 'menu') {
+    const ladder = TIERS.slice(1, 12);
+    ladder.forEach((t, i) => { const x = 60 + (i % 4) * 120, y = 200 + Math.floor(i / 4) * 110; K.snack(t[2], x, y + Math.sin(K.t * 3 + i) * 3, 26); K.text(t[0], x, y + 42, 13, C.ink, 'center', 800, false); if (i < ladder.length - 1 && i % 4 !== 3) K.text('→', x + 60, y, 18, '#b0a6cc', 'center', 800, false); });
+    if (K.button(W / 2 - 100, 520, 200, 60, 'Start cooking', { key: 'Enter', size: 18 }) || K.hit('Enter', 'Space')) newGame();
+    K.text(K.touch ? 'Swipe to slide every snack at once' : 'Arrow keys or WASD to slide. Swipes work too.', W / 2, 610, 14, '#6a5f86', 'center', 700, false);
+    return;
+  }
+  // score boxes
+  for (const [label, val, x] of [['Score', score, W - 214], ['Best', Math.max(best, score), W - 112]]) {
+    ctx.fillStyle = C.ink; K.rr(x, 24, 92, 58, 12); ctx.fill();
+    K.text(label, x + 46, 40, 12, '#b0a6cc', 'center', 800, false); K.text(val.toLocaleString(), x + 46, 62, val > 99999 ? 16 : 20, C.cream, 'center', 800, false);
+  }
+  K.text(`Top snack: ${TIERS[Math.min(topTier, TIERS.length - 1)][0]}`, 26, 132, 15, C.ink, 'left', 800, false);
+  if (K.button(W - 132, 112, 108, 38, 'New game', { size: 14, bg: C.cream })) newGame();
+  // board
+  ctx.fillStyle = C.ink; K.rr(BX + 4, BY + 6, N * CELL + (N + 1) * GAP, N * CELL + (N + 1) * GAP, 20); ctx.fill();
+  ctx.fillStyle = '#c9b8f0'; K.rr(BX, BY, N * CELL + (N + 1) * GAP, N * CELL + (N + 1) * GAP, 20); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) { const p = pos(r, c); ctx.fillStyle = 'rgba(255,255,255,.35)'; K.rr(p.x, p.y, CELL, CELL, 16); ctx.fill(); }
+  tiles.filter(t => t.dying).forEach(drawTile);
+  tiles.filter(t => !t.dying).forEach(drawTile);
+  K.drawParts();
+  if (banner > K.t) { ctx.fillStyle = 'rgba(21,19,31,.7)'; K.rr(40, 300, W - 80, 90, 18); ctx.fill(); K.text('You baked the cake!', W / 2, 332, 24, C.lemon); K.text('Keep going for the Sundae', W / 2, 364, 15, C.cream, 'center', 700); }
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(255,241,220,.82)'; ctx.fillRect(0, 0, W, H);
+    K.text('Kitchen’s full!', W / 2, 250, 46, C.tomato, 'center', 800, 'rgba(21,19,31,.25)');
+    K.text(`${score.toLocaleString()} points · top snack ${TIERS[Math.min(topTier, TIERS.length - 1)][0]}`, W / 2, 300, 18, C.ink, 'center', 800, false);
+    if (score >= best && score > 0) K.text('New best!', W / 2, 330, 16, C.gum, 'center', 800, false);
+    if (K.t - endAt > .6 && (K.button(W / 2 - 100, 370, 200, 58, 'Cook again', { key: 'Enter' }) || K.hit('Enter', 'Space'))) newGame();
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

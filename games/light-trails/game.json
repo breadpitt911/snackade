@@ -1,0 +1,17 @@
+{
+  "title": "Light Trails",
+  "description": "You leave a wall of light everywhere you go, and so do they. Box them in, cut them off, and make sure they crash first. Three boosts per round for when you need to get somewhere fast. First to five rounds.",
+  "instructions": "Player 1: WASD to turn, Space to boost. Player 2: arrow keys to turn, Enter to boost. Solo against the CPU, arrows work too. On a phone, swipe to turn.",
+  "category": "multiplayer",
+  "tags": [
+    "2-player",
+    "snake",
+    "neon",
+    "versus"
+  ],
+  "aspect": "16:9",
+  "accent": "#8e6cf0",
+  "seed": 63,
+  "featured": false,
+  "order": 6
+}

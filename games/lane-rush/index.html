@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Lane Rush</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#3d8b4a}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 800, H: 450 }), { ctx, C } = K, W = 800, H = 450;
+const LANES = 4, PY = H - 78, CAR_W = 34, CAR_H = 58;
+const TRAFFIC_COLS = ['#ff5a36', '#4fc3f7', '#8e6cf0', '#fff4e0', '#ff5da2', '#a6e22e'];
+let state = 'menu', mode = 1, views, rows, dist, speed, nextRow, rng, endAt = 0, winner = -1, countdown = 0;
+
+function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function newRace(m) {
+  mode = m;
+  const mk = (i, x0, w, color) => ({ i, x0, w, lane: 1 + i, x: 0, color, alive: true, coins: 0, dist: 0, tilt: 0 });
+  views = m === 1 ? [mk(0, 200, 400, C.lemon)] : [mk(0, 0, 400, C.lemon), mk(1, 400, 400, C.mint)];
+  views.forEach(v => { v.lane = 1 + v.i; v.x = laneX(v, v.lane); });
+  rows = []; dist = 0; speed = 300; nextRow = 520; rng = mulberry((Math.random() * 1e9) | 0);
+  winner = -1; countdown = 2.4;
+  state = 'play'; K.playing = true;
+}
+const roadL = v => v.x0 + 40, laneW = v => (v.w - 80) / LANES;
+const laneX = (v, l) => roadL(v) + laneW(v) * (l + .5);
+
+function genRows(upTo) {
+  while (nextRow < upTo) {
+    const n = rng() < Math.min(.55, .2 + dist / 30000) ? 2 : 1;
+    const lanes = [0, 1, 2, 3].sort(() => rng() - .5).slice(0, n);
+    const truck = rng() < .15;
+    const free = [0, 1, 2, 3].filter(l => !lanes.includes(l));
+    rows.push({ y: nextRow, cars: lanes.map(l => ({ lane: l, col: TRAFFIC_COLS[Math.floor(rng() * TRAFFIC_COLS.length)], len: truck && l === lanes[0] ? 100 : CAR_H })), coin: rng() < .4 ? { lane: free[Math.floor(rng() * free.length)], kind: ['candy', 'cookie', 'cherry'][Math.floor(rng() * 3)] } : null });
+    nextRow += Math.max(150, 260 - dist / 200) + rng() * 120;
+  }
+  rows = rows.filter(r => r.y > dist - 200);
+}
+
+function crash(v) {
+  v.alive = false; K.shake(.6); K.noise(.6, .14, 800); K.sfx(120, .5, 'sawtooth', .06, -80);
+  K.burst(v.x, PY, 36, [v.color, C.tomato, C.cream, '#555'], 280, .9, 5);
+  const alive = views.filter(x => x.alive);
+  if (!alive.length) {
+    state = 'over'; endAt = K.t; K.playing = false;
+    if (mode === 1) { const sc = Math.floor(views[0].dist / 10) + views[0].coins * 50; K.saveBest('lanes', sc); K.submit(sc); }
+    else winner = views[0].dist === views[1].dist ? -1 : views[0].dist > views[1].dist ? 0 : 1;
+  }
+}
+
+function update(dt) {
+  if (state !== 'play') return;
+  const ctl = mode === 1 ? [{ l: ['KeyA', 'ArrowLeft'], r: ['KeyD', 'ArrowRight'] }] : [{ l: ['KeyA'], r: ['KeyD'] }, { l: ['ArrowLeft'], r: ['ArrowRight'] }];
+  for (const v of views) {
+    if (!v.alive) continue;
+    const c = ctl[v.i];
+    if (K.hit(...c.l)) v.lane = Math.max(0, v.lane - 1);
+    if (K.hit(...c.r)) v.lane = Math.min(LANES - 1, v.lane + 1);
+    if (mode === 1) for (const t of K.taps()) v.lane = K.clamp(v.lane + (t.x < W / 2 ? -1 : 1), 0, LANES - 1);
+    const tx = laneX(v, v.lane), px = v.x;
+    v.x = K.lerp(v.x, tx, Math.min(1, dt * 14)); v.tilt = (v.x - px) / dt / 900;
+  }
+  if (countdown > 0) { const b = Math.ceil(countdown); countdown -= dt; if (Math.ceil(countdown) !== b && countdown > 0) K.sfx(440, .12, 'square', .05); if (countdown <= 0) K.sfx(880, .25, 'square', .06); return; }
+  speed = Math.min(760, speed + dt * 9);
+  dist += speed * dt;
+  genRows(dist + H + 200);
+  for (const v of views) {
+    if (!v.alive) continue;
+    v.dist = dist;
+    const lw = laneW(v);
+    for (const r of rows) {
+      const sy = PY - (r.y - dist);
+      for (const car of r.cars) {
+        const cx = laneX(v, car.lane);
+        if (Math.abs(cx - v.x) < CAR_W * .85 && Math.abs(sy - car.len / 2 + CAR_H / 2 - PY) < (car.len + CAR_H) / 2 - 6) return crash(v);
+      }
+      if (r.coin && !(r.coin.taken && r.coin.taken[v.i])) {
+        const cx = laneX(v, r.coin.lane);
+        if (Math.abs(cx - v.x) < lw * .45 && Math.abs(sy - PY) < 30) {
+          r.coin.taken = r.coin.taken || {}; r.coin.taken[v.i] = true; v.coins++;
+          K.sfx(1100, .08, 'triangle', .05, 400); K.burst(cx, sy, 8, [C.lemon, C.cream], 120, .4, 2.5);
+        }
+      }
+    }
+  }
+}
+
+function drawCar(x, y, col, len, tilt) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(tilt || 0);
+  const w = CAR_W, h = len || CAR_H;
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; K.rr(-w / 2 + 4, -h / 2 + 6, w, h, 8); ctx.fill();
+  ctx.fillStyle = C.ink; for (const yy of [-h / 2 + 10, h / 2 - 20]) { ctx.fillRect(-w / 2 - 3, yy, 5, 12); ctx.fillRect(w / 2 - 2, yy, 5, 12); }
+  ctx.fillStyle = col; K.rr(-w / 2, -h / 2, w, h, 8); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.fillStyle = '#bfe8ff'; K.rr(-w / 2 + 5, -h / 2 + 10, w - 10, 12, 3); ctx.fill(); ctx.stroke();
+  if (h > 80) { ctx.fillStyle = 'rgba(0,0,0,.15)'; ctx.fillRect(-w / 2 + 4, -h / 2 + 30, w - 8, h - 36); }
+  else { ctx.fillStyle = 'rgba(255,255,255,.35)'; K.rr(-w / 2 + 6, -h / 2 + 28, w - 12, 18, 3); ctx.fill(); }
+  ctx.restore();
+}
+function drawView(v) {
+  ctx.save(); ctx.beginPath(); ctx.rect(v.x0, 0, v.w, H); ctx.clip();
+  ctx.fillStyle = '#3d8b4a'; ctx.fillRect(v.x0, 0, v.w, H);
+  const sc = dist % 80;
+  ctx.fillStyle = '#44964f'; for (let y = -80 + sc; y < H; y += 80) ctx.fillRect(v.x0, y, v.w, 40);
+  // trees on the shoulders
+  for (let k = -1; k < 8; k++) { const y = ((k * 120 + dist * 1) % 960 + 960) % 960 - 120; for (const side of [0, 1]) { const x = side ? v.x0 + v.w - 18 : v.x0 + 18; K.circle(x, y + side * 60, 15, '#2f7a3e'); K.circle(x - 3, y + side * 60 - 4, 8, '#58b062'); } }
+  const rl = roadL(v), rw = v.w - 80, lw = laneW(v);
+  ctx.fillStyle = C.ink; ctx.fillRect(rl - 6, 0, rw + 12, H);
+  ctx.fillStyle = '#4a4658'; ctx.fillRect(rl, 0, rw, H);
+  ctx.fillStyle = '#fff4e0'; ctx.fillRect(rl + 3, 0, 4, H); ctx.fillRect(rl + rw - 7, 0, 4, H);
+  ctx.fillStyle = 'rgba(255,244,224,.6)';
+  for (let l = 1; l < LANES; l++) for (let y = -60 + (dist % 60); y < H; y += 60) ctx.fillRect(rl + l * lw - 2, y, 4, 30);
+  for (const r of rows) {
+    const sy = PY - (r.y - dist);
+    if (sy < -120 || sy > H + 120) continue;
+    if (r.coin && !(r.coin.taken && r.coin.taken[v.i])) K.snack(r.coin.kind, laneX(v, r.coin.lane), sy + Math.sin(K.t * 5 + r.y) * 3, 12);
+    for (const car of r.cars) drawCar(laneX(v, car.lane), sy - car.len / 2 + CAR_H / 2, car.col, car.len);
+  }
+  if (v.alive) {
+    if (state === 'play' && countdown <= 0) for (const s of [-8, 8]) { ctx.fillStyle = `rgba(255,201,60,${.4 + Math.random() * .4})`; ctx.fillRect(v.x + s - 3, PY + CAR_H / 2, 6, 6 + Math.random() * 10); }
+    drawCar(v.x, PY, v.color, CAR_H, v.tilt);
+  } else K.circle(v.x, PY, 26, 'rgba(21,19,31,.5)');
+  ctx.restore();
+  // HUD for this view
+  const label = mode === 1 ? '' : `P${v.i + 1}  `;
+  ctx.fillStyle = 'rgba(21,19,31,.75)'; K.rr(v.x0 + 50, 8, v.w - 100, 34, 10); ctx.fill();
+  K.text(`${label}${Math.floor(v.dist / 10).toLocaleString()} m`, v.x0 + 64, 25, 16, v.color, 'left', 800, false);
+  K.snack('candy', v.x0 + v.w - 96, 25, 8); K.text(`× ${v.coins}`, v.x0 + v.w - 84, 26, 15, C.cream, 'left', 800, false);
+  if (!v.alive && state === 'play') K.banner('Crashed!', v.x0 + v.w / 2, H / 2, 30, C.tomato);
+}
+
+function draw() {
+  if (state === 'menu') {
+    const fake = { i: 0, x0: 200, w: 400, color: C.lemon, alive: true, x: 0, dist: 0, coins: 0, tilt: 0 };
+    dist = K.t * 300; rows = rows || []; fake.x = laneX(fake, 1 + Math.round((Math.sin(K.t) + 1)));
+    ctx.fillStyle = '#3d8b4a'; ctx.fillRect(0, 0, W, H);
+    if (!menuRows) { rng = mulberry(7); nextRow = 0; rows = []; dist = 0; menuRows = true; }
+    genRows(dist + H + 200); drawView(fake);
+    ctx.fillStyle = 'rgba(21,19,31,.6)'; ctx.fillRect(0, 0, W, H);
+    K.text('Lane Rush', W / 2, 96, 72, C.cream);
+    K.text('Dodge the traffic. Grab the snacks. It only gets faster.', W / 2, 148, 18, C.lemon, 'center', 700);
+    if (K.button(W / 2 - 220, 182, 200, 60, '1 Player', { key: '1' }) || K.hit('Digit1')) { menuRows = false; newRace(1); }
+    if (K.button(W / 2 + 20, 182, 200, 60, '2 Players', { key: '2', bg: C.mint }) || K.hit('Digit2')) { menuRows = false; newRace(2); }
+    if (!K.touch) {
+      K.text('Player 1', W / 2 - 150, 290, 15, C.lemon); K.keycap(W / 2 - 168, 322, 'A'); K.keycap(W / 2 - 132, 322, 'D');
+      K.text('Player 2', W / 2 + 150, 290, 15, C.mint); K.keycap(W / 2 + 132, 322, '←'); K.keycap(W / 2 + 168, 322, '→');
+      K.text('Two players get a road each and the exact same traffic. Last one driving wins.', W / 2, 372, 14, 'rgba(255,244,224,.8)', 'center', 600, false);
+    } else K.text('Tap left or right to change lanes', W / 2, 310, 16, C.cream, 'center', 700);
+    const b = K.best('lanes'); if (b) K.text(`Best ${b.toLocaleString()}`, W / 2, 410, 14, C.lemon, 'center', 700, false);
+    return;
+  }
+  if (mode === 1) { ctx.fillStyle = '#2f7a3e'; ctx.fillRect(0, 0, W, H); }
+  views.forEach(drawView);
+  if (mode === 2) { ctx.fillStyle = C.ink; ctx.fillRect(W / 2 - 3, 0, 6, H); }
+  K.drawParts();
+  if (countdown > 0 && state === 'play') { const n = Math.ceil(countdown); K.banner(n > 2 ? 'Ready' : n === 2 ? 'Set' : 'Go!', W / 2, H / 2 - 40, 44, n === 1 ? C.lemon : C.cream); }
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(21,19,31,.78)'; ctx.fillRect(0, 0, W, H);
+    if (mode === 1) {
+      const sc = Math.floor(views[0].dist / 10) + views[0].coins * 50;
+      K.text('Wrecked!', W / 2, 130, 58, C.tomato);
+      K.text(`${Math.floor(views[0].dist / 10).toLocaleString()} m · ${views[0].coins} snacks · ${sc.toLocaleString()} points`, W / 2, 186, 20, C.cream, 'center', 700);
+      const best = K.best('lanes'); K.text(sc >= best && sc > 0 ? 'New best!' : `Best ${best.toLocaleString()}`, W / 2, 216, 16, C.lemon, 'center', 700);
+    } else {
+      K.text(winner < 0 ? 'Dead heat!' : `Player ${winner + 1} wins!`, W / 2, 140, 58, winner < 0 ? C.cream : views[winner].color);
+      K.text(`${Math.floor(views[0].dist / 10)} m vs ${Math.floor(views[1].dist / 10)} m`, W / 2, 196, 20, C.cream, 'center', 700);
+    }
+    if (K.t - endAt > .6) {
+      if (K.button(W / 2 - 210, 250, 190, 56, 'Go again', { key: 'Enter' }) || K.hit('Enter', 'Space')) newRace(mode);
+      if (K.button(W / 2 + 20, 250, 190, 56, 'Menu', { bg: C.mint }) || K.hit('Escape')) { state = 'menu'; menuRows = false; }
+    }
+  }
+}
+let menuRows = false;
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

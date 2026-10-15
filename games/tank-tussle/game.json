@@ -1,0 +1,17 @@
+{
+  "title": "Tank Tussle",
+  "description": "Two tiny tanks, one maze, shells that bounce off every wall. Line up a bank shot, dodge your own ricochet, and win five rounds before your mate does. A new arena every round. No friend handy? The CPU is happy to blow you up.",
+  "instructions": "Player 1: W/S to drive, A/D to turn, Space to fire. Player 2: arrow keys to drive and turn, Enter to fire. Solo players can use either set. On a phone, left thumb drives and tapping the right side fires.",
+  "category": "multiplayer",
+  "tags": [
+    "2-player",
+    "tanks",
+    "arena",
+    "versus"
+  ],
+  "aspect": "16:9",
+  "accent": "#2ee6c1",
+  "seed": 52,
+  "featured": false,
+  "order": 5
+}

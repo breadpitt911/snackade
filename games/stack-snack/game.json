@@ -1,0 +1,16 @@
+{
+  "title": "Stack Snack",
+  "description": "Build the tallest sandwich in history, one layer at a time. Tap to drop each filling. Whatever hangs over the edge gets chopped off, so the stack gets narrower unless you're precise. Land three perfect drops in a row and it starts growing back.",
+  "instructions": "Space, click or tap to drop the layer.",
+  "category": "casual",
+  "tags": [
+    "one-button",
+    "stacking",
+    "quick"
+  ],
+  "aspect": "3:4",
+  "accent": "#7bd94a",
+  "seed": 61,
+  "featured": false,
+  "order": 14
+}

@@ -1,0 +1,17 @@
+{
+  "title": "Lane Rush",
+  "description": "Four lanes, endless traffic, and you're going faster every second. Hop between lanes, squeeze past the trucks and grab snacks for bonus points. With two players you each get your own road and the exact same traffic: last one still driving wins.",
+  "instructions": "Player 1: A and D to change lanes. Player 2: left and right arrows. Solo? Either set works. On a phone, tap the left or right side.",
+  "category": "racing",
+  "tags": [
+    "2-player",
+    "endless",
+    "traffic",
+    "split-screen"
+  ],
+  "aspect": "16:9",
+  "accent": "#a6e22e",
+  "seed": 105,
+  "featured": false,
+  "order": 18
+}

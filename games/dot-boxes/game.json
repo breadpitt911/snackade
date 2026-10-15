@@ -1,0 +1,17 @@
+{
+  "title": "Dot Boxes",
+  "description": "The game you used to play on the back of a notebook. Take turns drawing lines between dots. Close a box and it's yours, and you go again. The trick is never drawing the third side of a box, because that's a gift for whoever goes next.",
+  "instructions": "Click (or tap) between two dots to draw a line. Keyboard: arrow keys to move, Space to draw. Play the CPU or take turns with a friend.",
+  "category": "strategy",
+  "tags": [
+    "2-player",
+    "pen and paper",
+    "brainy",
+    "classic"
+  ],
+  "aspect": "4:3",
+  "accent": "#3346ff",
+  "seed": 83,
+  "featured": false,
+  "order": 16
+}

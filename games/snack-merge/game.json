@@ -1,0 +1,17 @@
+{
+  "title": "Snack Merge",
+  "description": "Slide the board and every snack moves with it. Two of the same bump into each other and cook into something better: crumbs become berries, cookies become donuts, burgers become cake. How far up the menu can you get before the kitchen fills up?",
+  "instructions": "Arrow keys or WASD to slide everything. On a phone, swipe.",
+  "category": "puzzle",
+  "tags": [
+    "merge",
+    "sliding",
+    "brainy",
+    "chill"
+  ],
+  "aspect": "3:4",
+  "accent": "#ffc93c",
+  "seed": 39,
+  "featured": false,
+  "order": 12
+}

@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Tank Tussle</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#1c2333}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 800, H: 450 }), { ctx, C } = K, W = 800, H = 450;
+const B = 16, TR = 14, CELL = 20, WINS = 5;
+const MAPS = [
+  [[180, 110, 50, 50], [570, 110, 50, 50], [180, 290, 50, 50], [570, 290, 50, 50], [375, 175, 50, 100]],
+  [[390, 70, 20, 130], [390, 250, 20, 130], [230, 215, 140, 20], [430, 215, 140, 20]],
+  [[150, 16, 20, 150], [150, 284, 20, 150], [630, 16, 20, 150], [630, 284, 20, 150], [300, 140, 200, 20], [300, 290, 200, 20]],
+  [[260, 80, 20, 110], [520, 260, 20, 110], [100, 215, 110, 20], [590, 215, 110, 20], [360, 215, 80, 20]],
+  [[120, 90, 120, 20], [560, 90, 120, 20], [120, 340, 120, 20], [560, 340, 120, 20], [330, 160, 20, 130], [450, 160, 20, 130]],
+];
+const BORDER = [[0, 0, W, B], [0, H - B, W, B], [0, 0, B, H], [W - B, 0, B, H]];
+let state = 'menu', mode = 1, walls = [], tanks = [], shells = [], round = 0, roundEnd = 0, startIn = 0, grid = null, endAt = 0, mapIx = -1;
+
+function newMatch(m) {
+  mode = m; round = 0;
+  tanks = [makeTank(0, 60, H / 2, 0, C.lemon), makeTank(1, W - 60, H / 2, Math.PI, m === 1 ? C.tomato : C.mint)];
+  tanks.forEach(t => t.wins = 0);
+  newRound(); state = 'play'; K.playing = true;
+}
+function makeTank(i, x, y, a, color) { return { i, x, y, a, color, sx: x, sy: y, sa: a, alive: true, cd: 0, wins: 0, tread: 0, recoil: 0 }; }
+function newRound() {
+  round++;
+  let ix; do ix = K.irnd(0, MAPS.length - 1); while (ix === mapIx && MAPS.length > 1); mapIx = ix;
+  walls = BORDER.concat(MAPS[ix]);
+  buildGrid();
+  for (const t of tanks) Object.assign(t, { x: t.sx, y: t.sy, a: t.sa, alive: true, cd: .4, recoil: 0 });
+  shells = []; roundEnd = 0; startIn = 1.2; cpuState.path = null; cpuState.repath = 0;
+}
+
+// ---------- collision ----------
+function circleRect(x, y, r, w) {
+  const cx = K.clamp(x, w[0], w[0] + w[2]), cy = K.clamp(y, w[1], w[1] + w[3]);
+  const dx = x - cx, dy = y - cy, d2 = dx * dx + dy * dy;
+  if (d2 >= r * r) return null;
+  const d = Math.sqrt(d2) || .001;
+  if (d2 === 0) { // centre inside the box: push out the shortest way
+    const opts = [[x - w[0], -1, 0], [w[0] + w[2] - x, 1, 0], [y - w[1], 0, -1], [w[1] + w[3] - y, 0, 1]].sort((a, b) => a[0] - b[0])[0];
+    return { nx: opts[1], ny: opts[2], depth: opts[0] + r };
+  }
+  return { nx: dx / d, ny: dy / d, depth: r - d };
+}
+function pushOut(t) {
+  for (const w of walls) { const c = circleRect(t.x, t.y, TR, w); if (c) { t.x += c.nx * c.depth; t.y += c.ny * c.depth; } }
+}
+function inWall(x, y, pad) { return walls.some(w => x > w[0] - pad && x < w[0] + w[2] + pad && y > w[1] - pad && y < w[1] + w[3] + pad); }
+function segHitsWall(x1, y1, x2, y2, pad) {
+  for (const w of walls) {
+    const minX = w[0] - pad, maxX = w[0] + w[2] + pad, minY = w[1] - pad, maxY = w[1] + w[3] + pad;
+    let t0 = 0, t1 = 1; const dx = x2 - x1, dy = y2 - y1;
+    const clip = (p, q) => { if (p === 0) return q >= 0; const r = q / p; if (p < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; } return true; };
+    if (clip(-dx, x1 - minX) && clip(dx, maxX - x1) && clip(-dy, y1 - minY) && clip(dy, maxY - y1)) return true;
+  }
+  return false;
+}
+
+// ---------- CPU path grid ----------
+const GC = Math.ceil(W / CELL), GR = Math.ceil(H / CELL);
+function buildGrid() {
+  grid = new Uint8Array(GC * GR);
+  for (let r = 0; r < GR; r++) for (let c = 0; c < GC; c++) grid[r * GC + c] = inWall(c * CELL + CELL / 2, r * CELL + CELL / 2, TR + 2) ? 1 : 0;
+}
+function pathTo(sx, sy, tx, ty) {
+  const cell = (x, y) => K.clamp(Math.floor(y / CELL), 0, GR - 1) * GC + K.clamp(Math.floor(x / CELL), 0, GC - 1);
+  const s = cell(sx, sy), g = cell(tx, ty), prev = new Int32Array(GC * GR).fill(-1), q = [s];
+  prev[s] = s;
+  for (let qi = 0; qi < q.length; qi++) {
+    const n = q[qi]; if (n === g) break;
+    const c = n % GC, r = (n / GC) | 0;
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      const nc = c + dc, nr = r + dr; if (nc < 0 || nr < 0 || nc >= GC || nr >= GR) continue;
+      const m = nr * GC + nc; if (prev[m] !== -1 || (grid[m] && m !== g)) continue;
+      if (dc && dr && (grid[r * GC + nc] || grid[nr * GC + c])) continue;
+      prev[m] = n; q.push(m);
+    }
+  }
+  if (prev[g] === -1) return null;
+  const out = []; for (let n = g; n !== s; n = prev[n]) out.push({ x: (n % GC) * CELL + CELL / 2, y: ((n / GC) | 0) * CELL + CELL / 2 });
+  return out.reverse();
+}
+
+// ---------- shooting ----------
+function fire(t) {
+  if (t.cd > 0 || !t.alive || shells.filter(s => s.owner === t.i).length >= 5) return;
+  const bx = t.x + Math.cos(t.a) * (TR + 8), by = t.y + Math.sin(t.a) * (TR + 8);
+  if (inWall(bx, by, 2)) return;
+  shells.push({ x: bx, y: by, vx: Math.cos(t.a) * 270, vy: Math.sin(t.a) * 270, owner: t.i, age: 0, bounces: 0 });
+  t.cd = .28; t.recoil = 1;
+  K.sfx(180, .12, 'sawtooth', .05, -100); K.noise(.08, .05, 2000);
+  K.burst(bx, by, 5, [C.cream, C.lemon], 90, .2, 2);
+}
+function boom(t) {
+  t.alive = false;
+  K.shake(.8); K.noise(.6, .14, 700); K.sfx(90, .5, 'sawtooth', .06, -60);
+  K.burst(t.x, t.y, 40, [C.tomato, C.lemon, '#555', C.cream, t.color], 300, 1, 5, 120);
+  if (!roundEnd) roundEnd = K.t + 1.4;
+}
+
+// ---------- update ----------
+const cpuState = { path: null, repath: 0, aimErr: 0, strafe: 1 };
+function drive(t, fwd, turn, dt) {
+  t.a += turn * 3.1 * dt;
+  const sp = fwd > 0 ? 150 : 105;
+  t.x += Math.cos(t.a) * fwd * sp * dt; t.y += Math.sin(t.a) * fwd * sp * dt;
+  if (fwd) t.tread += fwd * dt * 12;
+  pushOut(t);
+}
+function human(t, keys, dt) {
+  const fwd = (K.key(...keys.up) ? 1 : 0) - (K.key(...keys.down) ? 1 : 0);
+  const turn = (K.key(...keys.right) ? 1 : 0) - (K.key(...keys.left) ? 1 : 0);
+  drive(t, fwd, turn, dt);
+  if (K.key(...keys.fire)) fire(t);
+}
+function touchControls(t, dt) {
+  const s = K.stick({ x: 0, y: 0, w: W / 2, h: H }, 60);
+  if (s && Math.hypot(s.dx, s.dy) > .2) {
+    const want = Math.atan2(s.dy, s.dx), d = K.angDiff(t.a, want);
+    drive(t, Math.abs(d) < 1.2 ? Math.hypot(s.dx, s.dy) : 0, K.clamp(d * 3, -1, 1), dt);
+  }
+  if (K.held({ x: W / 2, y: 0, w: W / 2, h: H })) fire(t);
+}
+function cpu(t, foe, dt) {
+  if (!foe.alive) return;
+  // dodge shells that are about to hit
+  for (const s of shells) {
+    const dx = t.x - s.x, dy = t.y - s.y, d = Math.hypot(dx, dy);
+    if (d < 110 && (s.vx * dx + s.vy * dy) / (d * 270) > .92 && (s.owner !== t.i || s.age > .3)) {
+      const side = Math.atan2(s.vy, s.vx) + Math.PI / 2 * cpuState.strafe;
+      drive(t, 1, K.clamp(K.angDiff(t.a, side) * 3, -1, 1), dt);
+      return;
+    }
+  }
+  const los = !segHitsWall(t.x, t.y, foe.x, foe.y, 4);
+  const d = Math.hypot(foe.x - t.x, foe.y - t.y);
+  if (los) {
+    const lead = d / 270 * .5;
+    const want = Math.atan2(foe.y + Math.sin(foe.a) * lead * 60 - t.y, foe.x + Math.cos(foe.a) * lead * 60 - t.x) + cpuState.aimErr;
+    const diff = K.angDiff(t.a, want);
+    drive(t, d > 280 ? .8 : d < 130 ? -.7 : 0, K.clamp(diff * 4, -1, 1), dt);
+    if (Math.abs(diff) < .09 && Math.random() < .5) { fire(t); cpuState.aimErr = K.rnd(-.08, .08); }
+    return;
+  }
+  cpuState.repath -= dt;
+  if (!cpuState.path || cpuState.repath <= 0) { cpuState.path = pathTo(t.x, t.y, foe.x, foe.y); cpuState.repath = .35; }
+  const p = cpuState.path;
+  if (!p || !p.length) { drive(t, -.5, 1, dt); return; }
+  while (p.length > 1 && Math.hypot(p[0].x - t.x, p[0].y - t.y) < CELL) p.shift();
+  const wp = p[Math.min(1, p.length - 1)];
+  const diff = K.angDiff(t.a, Math.atan2(wp.y - t.y, wp.x - t.x));
+  drive(t, Math.abs(diff) < .8 ? 1 : .15, K.clamp(diff * 4, -1, 1), dt);
+}
+
+const KEYS1 = { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], fire: ['Space', 'KeyF'] };
+const KEYS1_SOLO = { up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'], fire: ['Space', 'KeyF', 'Enter'] };
+const KEYS2 = { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], fire: ['Enter', 'Slash', 'Period', 'ShiftRight'] };
+
+function update(dt) {
+  if (state !== 'play') return;
+  if (startIn > 0) { startIn -= dt; return; }
+  const [a, b] = tanks;
+  for (const t of tanks) { t.cd -= dt; t.recoil = Math.max(0, t.recoil - dt * 6); }
+  if (a.alive) { if (K.touch && mode === 1) touchControls(a, dt); else human(a, mode === 1 ? KEYS1_SOLO : KEYS1, dt); }
+  if (b.alive) { if (mode === 2) human(b, KEYS2, dt); else cpu(b, a, dt); }
+  // tanks bump each other
+  if (a.alive && b.alive) { const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy); if (d < TR * 2 && d > 0) { const p = (TR * 2 - d) / 2; a.x -= dx / d * p; a.y -= dy / d * p; b.x += dx / d * p; b.y += dy / d * p; pushOut(a); pushOut(b); } }
+
+  for (const s of shells) {
+    s.age += dt;
+    const n = 4;
+    for (let i = 0; i < n && !s.dead; i++) {
+      s.x += s.vx * dt / n; if (inWall(s.x, s.y, 3)) { s.x -= s.vx * dt / n; s.vx *= -1; bounce(s); }
+      s.y += s.vy * dt / n; if (inWall(s.x, s.y, 3)) { s.y -= s.vy * dt / n; s.vy *= -1; bounce(s); }
+      for (const t of tanks) if (t.alive && (s.owner !== t.i || s.age > .15) && Math.hypot(t.x - s.x, t.y - s.y) < TR + 3) { s.dead = true; boom(t); break; }
+    }
+    if (s.age > 7) s.dead = true;
+  }
+  shells = shells.filter(s => !s.dead);
+
+  if (roundEnd && K.t > roundEnd) {
+    const alive = tanks.filter(t => t.alive);
+    if (alive.length === 1) alive[0].wins++;
+    if (tanks.some(t => t.wins >= WINS)) {
+      state = 'over'; endAt = K.t; K.playing = false;
+      if (mode === 1) { const sc = a.wins * 250 + (a.wins >= WINS ? 1000 : 0); K.saveBest('tanks', sc); K.submit(sc); }
+    } else newRound();
+  }
+}
+function bounce(s) { s.bounces++; K.sfx(900, .03, 'square', .015); if (s.bounces > 5) s.dead = true; }
+
+// ---------- drawing ----------
+function floor() {
+  ctx.fillStyle = '#232c40'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#28324a';
+  for (let y = 0; y < H; y += 40) for (let x = (y / 40 % 2) * 40; x < W; x += 80) ctx.fillRect(x, y, 40, 40);
+}
+function drawWalls() {
+  for (const w of walls) {
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(w[0] + 4, w[1] + 5, w[2], w[3]);
+    ctx.fillStyle = '#3d4a68'; ctx.fillRect(w[0], w[1], w[2], w[3]);
+    ctx.fillStyle = '#56648a'; ctx.fillRect(w[0], w[1], w[2], Math.min(5, w[3]));
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.strokeRect(w[0] + 1, w[1] + 1, w[2] - 2, w[3] - 2);
+  }
+}
+function drawTank(t) {
+  if (!t.alive) { K.circle(t.x, t.y, 16, 'rgba(0,0,0,.35)'); return; }
+  ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.a);
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; K.rr(-15, -12, 32, 28, 6); ctx.fill();
+  // treads
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = C.ink; K.rr(-16, side * 11 - 4, 32, 8, 3); ctx.fill();
+    ctx.fillStyle = '#4a4a5a'; for (let i = 0; i < 5; i++) { const x = -14 + ((i * 7 + t.tread * (side > 0 ? 1 : 1)) % 30 + 30) % 30; ctx.fillRect(x, side * 11 - 3, 2, 6); }
+  }
+  ctx.fillStyle = t.color; K.rr(-13, -9, 26, 18, 5); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.stroke();
+  const rec = t.recoil * 4;
+  ctx.fillStyle = C.ink; ctx.fillRect(2 - rec, -3, 18, 6);
+  ctx.fillStyle = t.color; ctx.fillRect(3 - rec, -2, 16, 4);
+  K.circle(0, 0, 8, t.color, C.ink, 2.5);
+  K.circle(-2, -2, 2.5, 'rgba(255,255,255,.55)');
+  ctx.restore();
+}
+function hud() {
+  const [a, b] = tanks;
+  ctx.fillStyle = 'rgba(21,19,31,.75)'; K.rr(W / 2 - 110, 2, 220, 34, 10); ctx.fill();
+  for (let i = 0; i < WINS; i++) {
+    K.circle(W / 2 - 22 - i * 16, 19, 5.5, i < a.wins ? a.color : 'rgba(255,255,255,.15)');
+    K.circle(W / 2 + 22 + i * 16, 19, 5.5, i < b.wins ? b.color : 'rgba(255,255,255,.15)');
+  }
+  K.text('vs', W / 2, 19, 12, C.cream, 'center', 800, false);
+}
+
+function draw() {
+  floor();
+  if (state === 'menu') {
+    walls = BORDER.concat(MAPS[0]); drawWalls();
+    const demo = [{ x: 120, y: 225, a: Math.sin(K.t) * .3, color: C.lemon, alive: true, tread: K.t * 10, recoil: 0 }, { x: 680, y: 225, a: Math.PI + Math.sin(K.t * 1.3) * .3, color: C.mint, alive: true, tread: K.t * 10, recoil: 0 }];
+    demo.forEach(drawTank);
+    ctx.fillStyle = 'rgba(28,35,51,.6)'; ctx.fillRect(0, 0, W, H);
+    K.text('Tank Tussle', W / 2, 98, 70, C.cream);
+    K.text('Shells bounce. Watch your own. First to 5 rounds.', W / 2, 150, 18, C.lemon, 'center', 700);
+    if (K.button(W / 2 - 220, 190, 200, 60, 'vs CPU', { key: '1' }) || K.hit('Digit1')) newMatch(1);
+    if (K.button(W / 2 + 20, 190, 200, 60, '2 Players', { key: '2', bg: C.mint }) || K.hit('Digit2')) newMatch(2);
+    if (!K.touch) {
+      K.text('Player 1', W / 2 - 150, 298, 15, C.lemon);
+      ['W', 'A', 'S', 'D'].forEach((k, i) => K.keycap(W / 2 - 222 + i * 34, 332, k)); K.keycap(W / 2 - 64, 332, 'Space', 64);
+      K.text('Player 2', W / 2 + 150, 298, 15, C.mint);
+      ['↑', '←', '↓', '→'].forEach((k, i) => K.keycap(W / 2 + 80 + i * 34, 332, k)); K.keycap(W / 2 + 232, 332, 'Enter', 60);
+      K.text('Drive, turn, fire. Solo players can use either set.', W / 2, 380, 14, 'rgba(255,244,224,.7)', 'center', 600, false);
+    } else K.text('Left thumb drives, tap the right side to fire', W / 2, 320, 16, C.cream, 'center', 700);
+    return;
+  }
+  drawWalls();
+  for (const s of shells) { K.circle(s.x, s.y, 4.5, C.ink); K.circle(s.x, s.y, 3, s.bounces ? C.cream : tanks[s.owner].color); }
+  tanks.forEach(drawTank);
+  K.drawParts();
+  hud();
+  if (startIn > 0 && state === 'play') { K.text(`Round ${round}`, W / 2, H / 2 - 10, 46, C.cream); K.text(startIn > .4 ? 'Get ready' : 'Go!', W / 2, H / 2 + 34, 20, C.lemon, 'center', 700); }
+  if (roundEnd && state === 'play') { const al = tanks.filter(t => t.alive); K.text(al.length === 1 ? (mode === 1 ? (al[0].i === 0 ? 'Got ’em!' : 'Boom. CPU wins the round') : `Player ${al[0].i + 1} takes the round`) : 'Double KO!', W / 2, H / 2, 32, C.cream); }
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(28,35,51,.8)'; ctx.fillRect(0, 0, W, H);
+    const w = tanks[0].wins >= WINS ? 0 : 1;
+    K.text(mode === 1 ? (w === 0 ? 'Victory!' : 'Scrapped.') : `Player ${w + 1} wins!`, W / 2, 140, 60, tanks[w].color);
+    K.text(`${tanks[0].wins} – ${tanks[1].wins}`, W / 2, 196, 26, C.cream);
+    if (K.t - endAt > .5) {
+      if (K.button(W / 2 - 210, 250, 190, 58, 'Rematch', { key: 'Enter' }) || K.hit('Enter', 'Space')) newMatch(mode);
+      if (K.button(W / 2 + 20, 250, 190, 58, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

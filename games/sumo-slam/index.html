@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Sumo Slam</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#2a1a2e}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 800, H: 450 }), { ctx, C } = K, W = 800, H = 450;
+const CX = 400, CY = 246, R0 = 192, RMIN = 105, WINS = 3;
+let state = 'menu', mode = 1, ring = R0, blobs, snacks = [], snackIn = 5, roundT = 0, startIn = 0, roundEnd = 0, roundMsg = '', endAt = 0, round = 0;
+
+function mkBlob(i, color, dark) { return { i, color, dark, wins: 0 }; }
+function newMatch(m) {
+  mode = m; round = 0;
+  blobs = [mkBlob(0, C.lemon, '#c99a1d'), mkBlob(1, m === 1 ? C.tomato : C.sky, m === 1 ? '#b8381d' : '#2a8fbf')];
+  newRound(); state = 'play'; K.playing = true;
+}
+function newRound() {
+  round++; ring = R0; roundT = 0; snacks = []; snackIn = K.rnd(4, 6); startIn = 1.3; roundEnd = 0;
+  blobs.forEach((b, i) => Object.assign(b, { x: CX + (i ? 90 : -90), y: CY, vx: 0, vy: 0, fx: i ? -1 : 1, fy: 0, cd: 0, dash: 0, fall: 0, out: false, chili: 0, donut: 0, squish: 0 }));
+  cpuMem.t = 0;
+}
+const radius = b => 24 + (b.donut > 0 ? 7 : 0);
+const mass = b => (b.donut > 0 ? 2 : 1) * (b.dash > 0 ? 1.8 : 1);
+
+function steer(b, ix, iy, dt) {
+  const m = Math.hypot(ix, iy);
+  if (m > .1) { b.fx = ix / m; b.fy = iy / m; if (m > 1) { ix /= m; iy /= m; } }
+  const acc = 950 * (b.chili > 0 ? 1.45 : 1);
+  b.vx += ix * acc * dt; b.vy += iy * acc * dt;
+}
+function dash(b) {
+  if (b.cd > 0 || b.out) return;
+  b.vx += b.fx * 560; b.vy += b.fy * 560; b.dash = .25; b.cd = 1.1; b.squish = 1;
+  K.sfx(220, .18, 'sawtooth', .05, 300); K.burst(b.x - b.fx * 20, b.y - b.fy * 20, 10, ['#f3e2b3', C.cream], 120, .4, 3);
+}
+
+const cpuMem = { t: 0, jitter: 0 };
+function cpu(b, o, dt) {
+  if (o.out) return;
+  let tx, ty;
+  const dC = Math.hypot(b.x - CX, b.y - CY);
+  const oc = Math.hypot(o.x - CX, o.y - CY) || 1, ux = (o.x - CX) / oc, uy = (o.y - CY) / oc;
+  const near = snacks.find(s => Math.hypot(s.x - b.x, s.y - b.y) < 130 && Math.hypot(s.x - CX, s.y - CY) < ring - 40);
+  if (dC > ring - 46) { tx = CX; ty = CY; }
+  else if (near) { tx = near.x; ty = near.y; }
+  else { tx = o.x - ux * 46; ty = o.y - uy * 46; }   // get between them and the middle
+  cpuMem.t -= dt; if (cpuMem.t <= 0) { cpuMem.t = .4; cpuMem.jitter = K.rnd(-.35, .35); }
+  let ix = tx - b.x, iy = ty - b.y; const m = Math.hypot(ix, iy) || 1; ix /= m; iy /= m;
+  const c = Math.cos(cpuMem.jitter), s = Math.sin(cpuMem.jitter); [ix, iy] = [ix * c - iy * s, ix * s + iy * c];
+  steer(b, ix, iy, dt);
+  const dx = o.x - b.x, dy = o.y - b.y, d = Math.hypot(dx, dy);
+  const lined = (dx * ux + dy * uy) / (d || 1) > .55;
+  if (d < 120 && lined && Math.random() < .08) { b.fx = dx / d; b.fy = dy / d; dash(b); }
+}
+
+function update(dt) {
+  if (state !== 'play') return;
+  const [a, b] = blobs;
+  if (startIn > 0) { startIn -= dt; return; }
+  roundT += dt;
+  if (roundT > 5 && !roundEnd) ring = Math.max(RMIN, ring - dt * 3.2);
+  // input
+  if (!a.out) {
+    if (K.touch && mode === 1) {
+      const s = K.stick({ x: 0, y: 0, w: W / 2, h: H }, 55);
+      if (s) steer(a, s.dx, s.dy, dt);
+      if (K.tappedIn({ x: W / 2, y: 0, w: W / 2, h: H })) dash(a);
+    } else {
+      const solo = mode === 1;
+      const ix = (K.key('KeyD') || (solo && K.key('ArrowRight')) ? 1 : 0) - (K.key('KeyA') || (solo && K.key('ArrowLeft')) ? 1 : 0);
+      const iy = (K.key('KeyS') || (solo && K.key('ArrowDown')) ? 1 : 0) - (K.key('KeyW') || (solo && K.key('ArrowUp')) ? 1 : 0);
+      steer(a, ix, iy, dt);
+      if (K.hit('Space', 'KeyF') || (solo && K.hit('Enter'))) dash(a);
+    }
+  }
+  if (!b.out) {
+    if (mode === 2) {
+      steer(b, (K.key('ArrowRight') ? 1 : 0) - (K.key('ArrowLeft') ? 1 : 0), (K.key('ArrowDown') ? 1 : 0) - (K.key('ArrowUp') ? 1 : 0), dt);
+      if (K.hit('Enter', 'Slash', 'Period', 'ShiftRight')) dash(b);
+    } else cpu(b, a, dt);
+  }
+  // physics
+  for (const p of blobs) {
+    p.cd -= dt; p.dash -= dt; p.chili -= dt; p.donut -= dt; p.squish = Math.max(0, p.squish - dt * 4);
+    const damp = Math.exp(-2.4 * dt); p.vx *= damp; p.vy *= damp;
+    const sp = Math.hypot(p.vx, p.vy), max = p.dash > 0 ? 900 : 300 * (p.chili > 0 ? 1.35 : 1);
+    if (sp > max) { p.vx *= max / sp; p.vy *= max / sp; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.out) { p.fall += dt; continue; }
+    if (Math.hypot(p.x - CX, p.y - CY) > ring + radius(p) * .35) {
+      p.out = true; p.fall = 0; K.sfx(400, .7, 'triangle', .06, -340); K.shake(.6);
+      if (!roundEnd) {
+        roundEnd = K.t + 1.6;
+        const w = blobs.find(x => !x.out);
+        if (w) { w.wins++; roundMsg = mode === 1 ? (w.i === 0 ? 'Out of the ring!' : 'Shoved out!') : `Player ${w.i + 1} takes the round`; }
+      }
+    }
+  }
+  if (!a.out && !b.out) {
+    const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), min = radius(a) + radius(b);
+    if (d < min && d > 0) {
+      const nx = dx / d, ny = dy / d, ma = mass(a), mb = mass(b);
+      const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+      if (rel < 0) {
+        const j = -(1 + .95) * rel / (1 / ma + 1 / mb) * 1.25;
+        a.vx -= j / ma * nx; a.vy -= j / ma * ny; b.vx += j / mb * nx; b.vy += j / mb * ny;
+        if (-rel > 160) { K.sfx(120 + Math.min(300, -rel / 3), .1, 'square', .06); K.burst(a.x + nx * radius(a), a.y + ny * radius(a), 10, [C.cream, '#f3e2b3'], 160, .35, 3); a.squish = b.squish = Math.min(1, -rel / 500); K.shake(Math.min(.4, -rel / 1500)); }
+      }
+      const push = (min - d) / 2; a.x -= nx * push; a.y -= ny * push; b.x += nx * push; b.y += ny * push;
+    }
+  }
+  // snacks
+  snackIn -= dt;
+  if (snackIn <= 0 && snacks.length < 2 && !roundEnd) {
+    const ang = K.rnd(0, Math.PI * 2), rr = K.rnd(0, ring - 50);
+    snacks.push({ x: CX + Math.cos(ang) * rr, y: CY + Math.sin(ang) * rr, type: Math.random() < .5 ? 'chili' : 'donut', born: K.t });
+    snackIn = K.rnd(6, 9);
+  }
+  for (const s of snacks) for (const p of blobs) if (!p.out && !s.got && Math.hypot(p.x - s.x, p.y - s.y) < radius(p) + 14) {
+    s.got = true; if (s.type === 'chili') p.chili = 5; else p.donut = 6;
+    K.jingle([660, 880], 60, 'triangle', .04); K.burst(s.x, s.y, 14, s.type === 'chili' ? [C.tomato, C.lemon] : [C.gum, C.cream], 160, .5, 3);
+  }
+  snacks = snacks.filter(s => !s.got && Math.hypot(s.x - CX, s.y - CY) < ring);
+  if (roundEnd && K.t > roundEnd) {
+    if (blobs.some(x => x.wins >= WINS)) {
+      state = 'over'; endAt = K.t; K.playing = false;
+      if (mode === 1) { const sc = a.wins * 300 + (a.wins >= WINS ? 1000 : 0) + Math.max(0, 600 - Math.round(roundT) * 5); K.saveBest('sumo', sc); K.submit(sc); }
+    } else newRound();
+  }
+}
+
+function arena() {
+  ctx.fillStyle = '#2a1a2e'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,.03)'; for (let i = 0; i < 9; i++) ctx.fillRect(0, i * 52, W, 26);
+  // platform
+  ctx.fillStyle = '#1a0f1d'; ctx.beginPath(); ctx.ellipse(CX, CY + 22, R0 + 26, R0 * .96 + 22, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#c9a66b'; ctx.beginPath(); ctx.ellipse(CX, CY + 8, R0 + 22, R0 + 18, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e8cf98'; ctx.beginPath(); ctx.arc(CX, CY, R0 + 18, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+  // shrinking ring
+  const danger = ring < R0 - 2;
+  ctx.fillStyle = '#f3e2b3'; ctx.beginPath(); ctx.arc(CX, CY, ring, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = danger ? `rgba(232,38,63,${.6 + Math.sin(K.t * 8) * .3})` : '#a07a3c'; ctx.lineWidth = 8; ctx.stroke();
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(CX, CY, ring + 5, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(160,122,60,.5)'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(CX - 40, CY - 14); ctx.lineTo(CX - 40, CY + 14); ctx.moveTo(CX + 40, CY - 14); ctx.lineTo(CX + 40, CY + 14); ctx.stroke();
+}
+function drawBlob(b) {
+  const r = radius(b);
+  let s = 1, alpha = 1;
+  if (b.out) { s = Math.max(0, 1 - b.fall * 1.6); alpha = s; if (s <= 0) return; }
+  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(b.x, b.y);
+  if (!b.out) { ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(3, r * .75, r * .95, r * .35, 0, 0, Math.PI * 2); ctx.fill(); }
+  const sq = b.squish * .18, sp = Math.min(.12, Math.hypot(b.vx, b.vy) / 3000);
+  ctx.scale(s * (1 + sq + sp), s * (1 - sq));
+  if (b.dash > 0) K.circle(0, 0, r + 7, 'rgba(255,255,255,.35)');
+  if (b.chili > 0) K.circle(0, 0, r + 4 + Math.sin(K.t * 20) * 2, 'rgba(255,90,54,.35)');
+  K.circle(0, 0, r, b.color, C.ink, 3);
+  ctx.save(); ctx.beginPath(); ctx.arc(0, 0, r - 1.5, 0, Math.PI * 2); ctx.clip();
+  ctx.fillStyle = b.dark; ctx.fillRect(-r, r * .28, r * 2, r * .32);
+  ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.beginPath(); ctx.ellipse(-r * .35, -r * .45, r * .32, r * .18, -.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // eyes look where it's heading
+  const lx = b.fx * 5, ly = b.fy * 4;
+  for (const ex of [-8, 8]) { K.circle(ex + lx * .4, -5 + ly * .4, 5.5, '#fff', C.ink, 2); K.circle(ex + lx, -5 + ly, 2.6, C.ink); }
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.beginPath();
+  if (b.dash > 0 || b.out) ctx.arc(lx * .4, 8 + ly * .4, 4, 0, Math.PI * 2); else ctx.arc(lx * .4, 5 + ly * .4, 5, .2, Math.PI - .2);
+  ctx.stroke();
+  ctx.restore();
+  if (!b.out && b.cd > 0) { ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(b.x, b.y, r + 9, -Math.PI / 2, -Math.PI / 2 + (1 - b.cd / 1.1) * Math.PI * 2); ctx.stroke(); }
+}
+
+function draw() {
+  arena();
+  if (state === 'menu') {
+    const fake = (i, x, col, dark) => ({ i, x, y: CY + Math.sin(K.t * 3 + i) * 6, color: col, dark, fx: i ? -1 : 1, fy: 0, vx: 0, vy: 0, squish: Math.max(0, Math.sin(K.t * 4)) * .5, dash: 0, out: false, cd: 0, donut: 0, chili: 0 });
+    drawBlob(fake(0, CX - 60 + Math.sin(K.t * 4) * 12, C.lemon, '#c99a1d')); drawBlob(fake(1, CX + 60 - Math.sin(K.t * 4) * 12, C.sky, '#2a8fbf'));
+    ctx.fillStyle = 'rgba(42,26,46,.62)'; ctx.fillRect(0, 0, W, H);
+    K.text('Sumo Slam', W / 2, 92, 74, C.cream);
+    K.text('Shove them out of the ring. It keeps getting smaller.', W / 2, 144, 18, C.lemon, 'center', 700);
+    if (K.button(W / 2 - 220, 182, 200, 60, 'vs CPU', { key: '1' }) || K.hit('Digit1')) newMatch(1);
+    if (K.button(W / 2 + 20, 182, 200, 60, '2 Players', { key: '2', bg: C.sky }) || K.hit('Digit2')) newMatch(2);
+    if (!K.touch) {
+      K.text('Player 1', W / 2 - 150, 290, 15, C.lemon);
+      ['W', 'A', 'S', 'D'].forEach((k, i) => K.keycap(W / 2 - 222 + i * 34, 324, k)); K.keycap(W / 2 - 64, 324, 'Space', 64);
+      K.text('Player 2', W / 2 + 150, 290, 15, C.sky);
+      ['↑', '←', '↓', '→'].forEach((k, i) => K.keycap(W / 2 + 80 + i * 34, 324, k)); K.keycap(W / 2 + 232, 324, 'Enter', 60);
+      K.text('Space / Enter = dash. Chili = speed, donut = heavyweight. Best of 5.', W / 2, 374, 14, 'rgba(255,244,224,.75)', 'center', 600, false);
+    } else K.text('Left thumb moves, tap the right side to dash', W / 2, 314, 16, C.cream, 'center', 700);
+    return;
+  }
+  for (const s of snacks) K.snack(s.type, s.x, s.y + Math.sin(K.t * 4 + s.born) * 3, 13);
+  [...blobs].sort((p, q) => p.y - q.y).forEach(drawBlob);
+  K.drawParts();
+  // HUD
+  blobs.forEach((b, i) => {
+    const x = i ? W - 24 : 24, al = i ? 'right' : 'left';
+    K.text(mode === 1 ? (i ? 'CPU' : 'You') : `Player ${i + 1}`, x, 26, 18, b.color, al);
+    for (let k = 0; k < WINS; k++) K.circle(i ? W - 32 - k * 22 : 32 + k * 22, 54, 7, k < b.wins ? b.color : 'rgba(255,255,255,.15)', C.ink, 2);
+  });
+  if (ring < R0 - 2 && state === 'play' && !roundEnd) K.text('Ring shrinking', W / 2, 24, 14, '#ff8a9b', 'center', 800);
+  if (startIn > 0 && state === 'play') K.banner(startIn > .4 ? `Round ${round}` : 'Hakkeyoi!', W / 2, CY - 90, 36, startIn > .4 ? C.cream : C.lemon);
+  if (roundEnd && state === 'play') K.banner(roundMsg, W / 2, CY - 90, 28, C.cream);
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(42,26,46,.8)'; ctx.fillRect(0, 0, W, H);
+    const w = blobs[0].wins >= WINS ? 0 : 1;
+    K.text(mode === 1 ? (w === 0 ? 'Grand champion!' : 'CPU stays in') : `Player ${w + 1} wins!`, W / 2, 140, 56, blobs[w].color);
+    K.text(`${blobs[0].wins} – ${blobs[1].wins}`, W / 2, 196, 26, C.cream);
+    if (K.t - endAt > .5) {
+      if (K.button(W / 2 - 210, 250, 190, 58, 'Rematch', { key: 'Enter' }) || K.hit('Enter', 'Space')) newMatch(mode);
+      if (K.button(W / 2 + 20, 250, 190, 58, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

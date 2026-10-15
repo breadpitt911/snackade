@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Stack Snack</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#bfe8ff}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 480, H: 640 }), { ctx, C } = K, W = 480, H = 640;
+const LH = 24, BASE_W = 250, BASE_Y = 560;
+const FILLINGS = [
+  { name: 'lettuce', col: '#7bd94a', edge: '#4c8a2b' }, { name: 'cheese', col: '#ffd25e', edge: '#d9a520' },
+  { name: 'tomato', col: '#ef3b55', edge: '#a8142a' }, { name: 'ham', col: '#ffa3b5', edge: '#d9667e' },
+  { name: 'patty', col: '#7a4529', edge: '#4a2614' }, { name: 'egg', col: '#fff4e0', edge: '#e0c890' },
+];
+let state = 'menu', stack, mover, falling, cam, combo, perfects, endAt = 0, popText = null;
+
+function newGame() {
+  stack = [{ x: W / 2 - BASE_W / 2, w: BASE_W, y: BASE_Y, f: -1 }];
+  falling = []; cam = 0; combo = 0; perfects = 0; popText = null;
+  nextLayer(); state = 'play'; K.playing = true;
+}
+function nextLayer() {
+  const top = stack[stack.length - 1], n = stack.length;
+  const fromLeft = n % 2 === 1;
+  mover = { x: fromLeft ? -top.w * .5 : W - top.w * .5, w: top.w, y: top.y - LH, f: (n - 1) % FILLINGS.length, dir: fromLeft ? 1 : -1, sp: Math.min(430, 190 + n * 7) };
+}
+function drop() {
+  const top = stack[stack.length - 1];
+  const off = mover.x - top.x;
+  if (Math.abs(off) < 5) {
+    mover.x = top.x; combo++; perfects++;
+    if (combo >= 3) { const grow = Math.min(12, BASE_W - mover.w); mover.w += grow; mover.x -= grow / 2; }
+    popText = { t: K.t, s: combo >= 3 ? `Perfect ×${combo}!` : 'Perfect!' };
+    K.sfx(520 + combo * 80, .12, 'triangle', .06, 200);
+    K.burst(mover.x + mover.w / 2, mover.y - cam, 14, [C.lemon, C.cream], 160, .5, 3);
+  } else {
+    combo = 0;
+    const left = Math.max(mover.x, top.x), right = Math.min(mover.x + mover.w, top.x + top.w);
+    if (right - left <= 0) { falling.push({ ...mover, vy: 0, rot: 0, vr: mover.dir * 2 }); mover = null; return over(); }
+    // the bit that hangs off falls away
+    if (mover.x < left) falling.push({ x: mover.x, w: left - mover.x, y: mover.y, f: mover.f, vy: 0, rot: 0, vr: -2.5 });
+    if (mover.x + mover.w > right) falling.push({ x: right, w: mover.x + mover.w - right, y: mover.y, f: mover.f, vy: 0, rot: 0, vr: 2.5 });
+    mover.x = left; mover.w = right - left;
+    K.sfx(300, .07, 'square', .04); K.noise(.08, .04, 1500);
+  }
+  stack.push({ x: mover.x, w: mover.w, y: mover.y, f: mover.f, land: K.t });
+  nextLayer();
+}
+function over() {
+  state = 'over'; endAt = K.t; K.playing = false;
+  const sc = (stack.length - 1) * 10 + perfects * 5;
+  K.saveBest('stack', sc); K.submit(sc);
+  K.sfx(260, .5, 'sawtooth', .05, -180);
+}
+
+function update(dt) {
+  if (state === 'menu') return;
+  for (const f of falling) { f.vy += 1200 * dt; f.y += f.vy * dt; f.rot += f.vr * dt; }
+  falling = falling.filter(f => f.y - cam < H + 100);
+  const topY = stack[stack.length - 1].y;
+  cam = K.lerp(cam, Math.min(0, topY - 330), Math.min(1, dt * 4));
+  if (state !== 'play' || !mover) return;
+  mover.x += mover.dir * mover.sp * dt;
+  if (mover.x > W - mover.w * .25 && mover.dir > 0) mover.dir = -1;
+  if (mover.x < -mover.w * .75 && mover.dir < 0) mover.dir = 1;
+  if (K.hit('Space', 'Enter', 'ArrowDown', 'KeyS') || K.tapped()) drop();
+}
+
+function layer(x, y, w, f, alpha) {
+  ctx.globalAlpha = alpha || 1;
+  if (f < 0) { // bottom slice of bread
+    ctx.fillStyle = '#f0a245'; K.rr(x, y, w, LH + 8, 10); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#ffe1b8'; K.rr(x + 6, y + 4, w - 12, LH - 6, 6); ctx.fill();
+    ctx.globalAlpha = 1; return;
+  }
+  const fl = FILLINGS[f];
+  ctx.fillStyle = fl.col;
+  if (fl.name === 'lettuce') {
+    ctx.beginPath(); ctx.moveTo(x, y + LH / 2);
+    for (let i = 0; i <= Math.ceil(w / 14); i++) { const xx = Math.min(x + w, x + i * 14); ctx.quadraticCurveTo(xx - 7, y + (i % 2 ? -4 : 4), xx, y + 3); }
+    ctx.lineTo(x + w, y + LH); ctx.lineTo(x, y + LH); ctx.closePath(); ctx.fill();
+  } else { K.rr(x, y, w, LH, fl.name === 'patty' ? 9 : 5); ctx.fill(); }
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.save(); K.rr(x, y, w, LH, 5); ctx.clip();
+  if (fl.name === 'cheese') for (let i = 12; i < w; i += 28) K.circle(x + i, y + 8 + (i % 3) * 3, 4, fl.edge);
+  if (fl.name === 'tomato') for (let i = 16; i < w; i += 34) { K.circle(x + i, y + LH / 2, 8, '#ff6b7f'); K.circle(x + i, y + LH / 2, 3, '#ffd25e'); }
+  if (fl.name === 'patty') { ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 3; for (let i = 10; i < w; i += 22) { ctx.beginPath(); ctx.moveTo(x + i, y + 5); ctx.lineTo(x + i + 10, y + LH - 5); ctx.stroke(); } }
+  if (fl.name === 'egg') K.circle(x + w / 2, y + LH / 2 + 2, Math.min(w / 3, 14), '#ffc93c');
+  if (fl.name === 'ham') { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(x, y + 4, w, 3); }
+  ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.fillRect(x, y + 2, w, 3);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+function topBun(x, y, w) {
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x, y - 50, x + w / 2, y - 52); ctx.quadraticCurveTo(x + w, y - 50, x + w, y); ctx.closePath();
+  ctx.fillStyle = '#f0a245'; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+  for (let i = 0; i < 7; i++) { ctx.fillStyle = '#fff4e0'; ctx.beginPath(); ctx.ellipse(x + w * (.15 + i * .12), y - 26 - (i % 2) * 10, 4, 2, .5, 0, Math.PI * 2); ctx.fill(); }
+}
+
+function back() {
+  ctx.fillStyle = '#bfe8ff'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2;
+  for (let y = ((-cam * .4) % 48 + 48) % 48 - 48; y < H; y += 48) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  for (let x = 0; x < W; x += 48) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  const py = BASE_Y + LH + 8 - cam;
+  if (py < H + 40) { ctx.fillStyle = '#fff4e0'; ctx.beginPath(); ctx.ellipse(W / 2, py + 6, 175, 20, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke(); ctx.fillStyle = '#d7e9f7'; ctx.beginPath(); ctx.ellipse(W / 2, py + 4, 140, 12, 0, 0, Math.PI * 2); ctx.fill(); }
+}
+
+function draw() {
+  if (state === 'menu') cam = 0;
+  back();
+  if (state === 'menu') {
+    let y = BASE_Y; layer(W / 2 - 125, y, 250, -1);
+    const n = 6; for (let i = 0; i < n; i++) { y -= LH; layer(W / 2 - 125 + Math.sin(i * 1.7) * 8, y, 250 - i * 6, i); }
+    topBun(W / 2 - 110, y, 220);
+    K.text('Stack Snack', W / 2, 96, 60, C.tomato, 'center', 800, C.ink);
+    K.text('One tap. One very tall sandwich.', W / 2, 146, 18, C.ink, 'center', 800, false);
+    if (K.button(W / 2 - 100, 180, 200, 60, 'Stack it', { key: 'Enter' }) || K.hit('Enter', 'Space')) newGame();
+    K.text(K.touch ? 'Tap to drop each layer' : 'Space, click or tap to drop each layer', W / 2, 270, 15, C.ink, 'center', 700, false);
+    const b = K.best('stack'); if (b) K.text(`Best ${b.toLocaleString()}`, W / 2, 296, 14, C.ink, 'center', 800, false);
+    return;
+  }
+  ctx.save(); ctx.translate(0, -cam);
+  stack.forEach((l, i) => { const bump = l.land && K.t - l.land < .15 ? Math.sin((K.t - l.land) / .15 * Math.PI) * 3 : 0; layer(l.x, l.y + bump, l.w, l.f); });
+  if (mover && state === 'play') layer(mover.x, mover.y, mover.w, mover.f);
+  for (const f of falling) { ctx.save(); ctx.translate(f.x + f.w / 2, f.y + LH / 2); ctx.rotate(f.rot); layer(-f.w / 2, -LH / 2, f.w, f.f); ctx.restore(); }
+  if (state === 'over' && K.t - endAt > .4) { const t = stack[stack.length - 1]; const drop = Math.max(0, 1 - (K.t - endAt - .4) * 3) * 200; topBun(t.x, t.y - drop, t.w); }
+  ctx.restore();
+  K.drawParts();
+  K.text(String(stack.length - 1), W / 2, 60, 54, C.cream, 'center', 800, 'rgba(21,19,31,.5)');
+  if (popText && K.t - popText.t < .9) { ctx.globalAlpha = 1 - (K.t - popText.t) / .9; K.text(popText.s, W / 2, 110 - (K.t - popText.t) * 30, 22, C.gum, 'center', 800, 'rgba(21,19,31,.4)'); ctx.globalAlpha = 1; }
+  if (state === 'over' && K.t - endAt > .9) {
+    ctx.fillStyle = 'rgba(21,19,31,.5)'; ctx.fillRect(0, 140, W, 260);
+    const sc = (stack.length - 1) * 10 + perfects * 5;
+    K.text(`${stack.length - 1} layers!`, W / 2, 190, 46, C.cream);
+    K.text(`${sc.toLocaleString()} points · ${perfects} perfect`, W / 2, 236, 18, C.lemon, 'center', 700);
+    if (K.button(W / 2 - 210, 290, 190, 56, 'Again!', { key: 'Enter' }) || K.hit('Enter', 'Space')) newGame();
+    if (K.button(W / 2 + 20, 290, 190, 56, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

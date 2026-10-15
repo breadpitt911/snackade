@@ -1,0 +1,16 @@
+{
+  "title": "Jelly Jump",
+  "description": "A jelly that can't stop bouncing, and a sky that never ends. Hop from biscuit to biscuit, catch a ride on the moving ones, hit a spring for a big launch, and stomp anything spiky. Wafer platforms crumble after one bounce, so don't hang about.",
+  "instructions": "Left and right arrows or A/D to steer (the mouse works too). On a phone, hold the left or right side of the screen.",
+  "category": "platformer",
+  "tags": [
+    "endless",
+    "jumping",
+    "one-thumb"
+  ],
+  "aspect": "3:4",
+  "accent": "#ff5da2",
+  "seed": 50,
+  "featured": false,
+  "order": 13
+}

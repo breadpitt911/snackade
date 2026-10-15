@@ -1,6 +1,7 @@
 // All of Snackbar's drawn graphics live here as SVG strings: the logo, icons,
 // creature avatars, badge medals, hand-drawn covers for the starter games and
 // generated covers for everything uploaded without one.
+import { MORE_COVERS } from './covers.js';
 const INK = '#15131F';
 let uid = 0;
 const id = (p) => `${p}${++uid}`;
@@ -225,6 +226,7 @@ const BUILTIN_COVERS = {
    <circle cx="8" cy="-2" r="4.2" fill="#fff4e0"/><circle cx="9.3" cy="-2" r="2" fill="#15131F"/>
    <path d="M6-9q3-7 7-6" stroke="#15131F" stroke-width="2" fill="none"/></g>
   </svg>`,
+  ...MORE_COVERS,
 };
 
 // ---------- illustrations for empty / loading states ----------

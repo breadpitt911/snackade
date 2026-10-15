@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Light Trails</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#0c0a1d}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 800, H: 450 }), { ctx, C } = K, W = 800, H = 450;
+const S = 10, COLS = 80, ROWS = 42, TOP = 30, WINS = 5;
+const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+let state = 'menu', mode = 1, grid, bikes, sub = 0, acc = 0, tick = 1 / 13, startIn = 0, roundEnd = 0, roundMsg = '', endAt = 0, round = 0;
+const layer = document.createElement('canvas'); layer.width = W; layer.height = H; const lc = layer.getContext('2d');
+
+function newMatch(m) {
+  mode = m; round = 0;
+  bikes = [mkBike(0, '#ffc93c', '#fff1b8'), mkBike(1, m === 1 ? '#ff5a36' : '#2ee6c1', m === 1 ? '#ffc2b0' : '#c4fff2')];
+  newRound(); state = 'play'; K.playing = true;
+}
+function mkBike(i, color, core) { return { i, color, core, wins: 0 }; }
+function newRound() {
+  round++; grid = new Uint8Array(COLS * ROWS); lc.clearRect(0, 0, W, H);
+  const y = ROWS / 2 | 0;
+  Object.assign(bikes[0], { x: 12, y, dir: 'right', q: [], alive: true, boosts: 3, boost: 0 });
+  Object.assign(bikes[1], { x: COLS - 13, y, dir: 'left', q: [], alive: true, boosts: 3, boost: 0 });
+  bikes.forEach(b => paint(b, b.x, b.y));
+  tick = 1 / 13; acc = 0; sub = 0; startIn = 1.3; roundEnd = 0; roundMsg = '';
+}
+function paint(b, x, y) {
+  grid[y * COLS + x] = b.i + 1;
+  lc.fillStyle = b.color; lc.fillRect(x * S, TOP + y * S, S, S);
+  lc.fillStyle = b.core; lc.fillRect(x * S + 3, TOP + y * S + 3, S - 6, S - 6);
+}
+const free = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS && !grid[y * COLS + x];
+const opposite = { up: 'down', down: 'up', left: 'right', right: 'left' };
+
+function turn(b, d) {
+  const last = b.q.length ? b.q[b.q.length - 1] : b.dir;
+  if (d !== last && d !== opposite[last] && b.q.length < 2) b.q.push(d);
+}
+function boost(b) { if (b.boosts > 0 && b.boost <= 0) { b.boosts--; b.boost = 1; K.sfx(330, .3, 'sawtooth', .04, 500); } }
+
+// flood fill: how much room is reachable from (x, y)?
+function room(x, y, cap) {
+  if (!free(x, y)) return 0;
+  const seen = new Uint8Array(COLS * ROWS), st = [y * COLS + x]; seen[st[0]] = 1; let n = 0;
+  while (st.length && n < cap) {
+    const c = st.pop(); n++;
+    const cx = c % COLS, cy = (c / COLS) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + dx, ny = cy + dy, m = ny * COLS + nx;
+      if (nx >= 0 && ny >= 0 && nx < COLS && ny < ROWS && !grid[m] && !seen[m]) { seen[m] = 1; st.push(m); }
+    }
+  }
+  return n;
+}
+function cpu(b, foe) {
+  let best = null, bestScore = -1e9;
+  for (const d of ['up', 'down', 'left', 'right']) {
+    if (d === opposite[b.dir]) continue;
+    const [dx, dy] = DIRS[d], nx = b.x + dx, ny = b.y + dy;
+    if (!free(nx, ny)) continue;
+    let sc = room(nx, ny, 700);
+    // look a few cells ahead so it doesn't drive into pockets
+    let run = 0; for (let k = 1; k <= 6 && free(b.x + dx * k, b.y + dy * k); k++) run++;
+    sc += run * 6;
+    // hunt: prefer heading toward where the foe is going (cut them off)
+    const fx = foe.x + DIRS[foe.dir][0] * 6, fy = foe.y + DIRS[foe.dir][1] * 6;
+    sc -= Math.hypot(fx - nx, fy - ny) * .8;
+    if (d === b.dir) sc += 4;
+    sc += Math.random() * 6;
+    if (sc > bestScore) { bestScore = sc; best = d; }
+  }
+  if (best && best !== b.dir) b.q = [best];
+  const [dx, dy] = DIRS[b.dir];
+  let ahead = 0; for (let k = 1; k <= 12 && free(b.x + dx * k, b.y + dy * k); k++) ahead++;
+  if (ahead >= 12 && Math.hypot(foe.x - b.x, foe.y - b.y) < 25 && Math.random() < .02) boost(b);
+}
+
+function step() {
+  // Each bike moves on every other sub-step, or every sub-step while boosting.
+  sub++;
+  const movers = bikes.filter(b => b.alive && (b.boost > 0 || sub % 2 === 0));
+  if (!movers.length) return;
+  if (mode === 1 && movers.includes(bikes[1])) cpu(bikes[1], bikes[0]);
+  const next = movers.map(b => {
+    if (b.q.length) b.dir = b.q.shift();
+    const [dx, dy] = DIRS[b.dir];
+    return { b, x: b.x + dx, y: b.y + dy };
+  });
+  const crashed = new Set();
+  for (const n of next) if (!free(n.x, n.y)) crashed.add(n.b);
+  if (next.length === 2 && next[0].x === next[1].x && next[0].y === next[1].y) { crashed.add(next[0].b); crashed.add(next[1].b); }
+  for (const n of next) {
+    if (crashed.has(n.b)) { n.b.alive = false; continue; }
+    n.b.x = n.x; n.b.y = n.y; paint(n.b, n.x, n.y);
+  }
+  if (crashed.size) {
+    for (const b of crashed) { const px = b.x * S + S / 2, py = TOP + b.y * S + S / 2; K.burst(px, py, 34, [b.color, b.core, '#fff'], 260, .9, 3.5); }
+    K.shake(.6); K.noise(.5, .12, 900);
+    const alive = bikes.filter(b => b.alive);
+    if (alive.length <= 1) {
+      roundEnd = K.t + 1.6;
+      if (alive.length === 1) { alive[0].wins++; roundMsg = mode === 1 ? (alive[0].i === 0 ? 'Nice cut!' : 'CPU boxed you in') : `Player ${alive[0].i + 1} takes it`; }
+      else roundMsg = 'Head-on! Nobody scores';
+    }
+  }
+}
+
+function update(dt) {
+  if (state !== 'play') return;
+  const [a, b] = bikes;
+  // input (queued so quick double-turns work)
+  const p1 = mode === 1 ? [['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown'], ['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']] : [['KeyW'], ['KeyS'], ['KeyA'], ['KeyD']];
+  ['up', 'down', 'left', 'right'].forEach((d, i) => { if (K.hit(...p1[i])) turn(a, d); });
+  const sw = K.swipe(18); if (sw && mode === 1) turn(a, sw);
+  if (K.hit('Space', 'KeyF') || (mode === 1 && K.hit('Enter'))) boost(a);
+  if (mode === 2) {
+    [['ArrowUp', 'up'], ['ArrowDown', 'down'], ['ArrowLeft', 'left'], ['ArrowRight', 'right']].forEach(([k, d]) => { if (K.hit(k)) turn(b, d); });
+    if (K.hit('Enter', 'Slash', 'Period', 'ShiftRight')) boost(b);
+  }
+  if (K.touch && mode === 1) for (const t of K.taps()) if (t.y > H - 70 && t.x > W - 140) boost(a);
+
+  if (startIn > 0) { startIn -= dt; return; }
+  if (roundEnd) {
+    if (K.t > roundEnd) {
+      if (bikes.some(x => x.wins >= WINS)) {
+        state = 'over'; endAt = K.t; K.playing = false;
+        if (mode === 1) { const sc = a.wins * 250 + (a.wins >= WINS ? 1000 : 0); K.saveBest('trails', sc); K.submit(sc); }
+      } else newRound();
+    }
+    return;
+  }
+  for (const x of bikes) x.boost = Math.max(0, x.boost - dt);
+  tick = Math.max(1 / 22, tick - dt * .0016);
+  acc += dt;
+  const subDt = tick / 2;
+  while (acc >= subDt && !roundEnd) { acc -= subDt; step(); }
+}
+
+function backdrop() {
+  ctx.fillStyle = '#0c0a1d'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(142,108,240,.13)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = 0; x <= COLS; x += 2) { ctx.moveTo(x * S + .5, TOP); ctx.lineTo(x * S + .5, TOP + ROWS * S); }
+  for (let y = 0; y <= ROWS; y += 2) { ctx.moveTo(0, TOP + y * S + .5); ctx.lineTo(W, TOP + y * S + .5); }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(142,108,240,.6)'; ctx.lineWidth = 2; ctx.strokeRect(1, TOP + 1, W - 2, ROWS * S - 2);
+}
+function head(b) {
+  const x = b.x * S + S / 2, y = TOP + b.y * S + S / 2;
+  K.circle(x, y, 11 + Math.sin(K.t * 18) * 1.5, b.color + '44');
+  K.circle(x, y, 6.5, b.core, b.color, 2.5);
+  if (b.boost > 0) K.burst(x, y, 1, [b.core], 60, .25, 2);
+}
+
+function draw() {
+  backdrop();
+  if (state === 'menu') {
+    // attract mode: two snakes of light drawing a pattern
+    const t = K.t;
+    for (let i = 0; i < 2; i++) {
+      ctx.strokeStyle = i ? '#2ee6c1' : '#ffc93c'; ctx.lineWidth = 6; ctx.lineJoin = 'miter';
+      ctx.beginPath();
+      for (let k = 0; k < 60; k++) { const u = t * .8 - k * .05 + i * Math.PI; const x = W / 2 + Math.round(Math.cos(u) * 300 / 10) * 10, y = H / 2 + 20 + Math.round(Math.sin(u * 2) * 120 / 10) * 10; k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+      ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(12,10,29,.6)'; ctx.fillRect(0, 0, W, H);
+    K.text('Light Trails', W / 2, 100, 70, C.cream);
+    K.text('Don’t hit a wall. Don’t hit a trail. Make them hit yours.', W / 2, 152, 18, '#b39dff', 'center', 700);
+    if (K.button(W / 2 - 220, 190, 200, 60, 'vs CPU', { key: '1' }) || K.hit('Digit1')) newMatch(1);
+    if (K.button(W / 2 + 20, 190, 200, 60, '2 Players', { key: '2', bg: C.mint }) || K.hit('Digit2')) newMatch(2);
+    if (!K.touch) {
+      K.text('Player 1', W / 2 - 150, 298, 15, C.lemon);
+      ['W', 'A', 'S', 'D'].forEach((k, i) => K.keycap(W / 2 - 222 + i * 34, 332, k)); K.keycap(W / 2 - 64, 332, 'Space', 64);
+      K.text('Player 2', W / 2 + 150, 298, 15, C.mint);
+      ['↑', '←', '↓', '→'].forEach((k, i) => K.keycap(W / 2 + 80 + i * 34, 332, k)); K.keycap(W / 2 + 232, 332, 'Enter', 60);
+      K.text('Space / Enter = boost (3 per round). First to 5.', W / 2, 380, 14, 'rgba(255,244,224,.7)', 'center', 600, false);
+    } else K.text('Swipe to turn, tap BOOST for a burst of speed', W / 2, 320, 16, C.cream, 'center', 700);
+    return;
+  }
+  ctx.save(); ctx.shadowColor = 'rgba(255,255,255,.35)'; ctx.shadowBlur = 8; ctx.drawImage(layer, 0, 0); ctx.restore();
+  bikes.forEach(b => { if (b.alive) head(b); });
+  K.drawParts();
+  // HUD
+  ctx.fillStyle = 'rgba(12,10,29,.9)'; ctx.fillRect(0, 0, W, TOP);
+  bikes.forEach((b, i) => {
+    const x = i ? W - 20 : 20, al = i ? 'right' : 'left';
+    K.text(mode === 1 ? (i ? 'CPU' : 'You') : `P${i + 1}`, x, 15, 14, b.color, al, 800, false);
+    for (let k = 0; k < WINS; k++) K.circle(i ? W - 70 - k * 14 : 70 + k * 14, 15, 4.5, k < b.wins ? b.color : 'rgba(255,255,255,.15)');
+    for (let k = 0; k < 3; k++) { ctx.fillStyle = k < b.boosts ? b.core : 'rgba(255,255,255,.12)'; const bx = i ? W - 160 - k * 12 : 150 + k * 12; ctx.beginPath(); ctx.moveTo(bx, 8); ctx.lineTo(bx + 6, 15); ctx.lineTo(bx, 22); ctx.closePath(); ctx.fill(); }
+  });
+  K.text(`Round ${round}`, W / 2, 15, 13, 'rgba(255,244,224,.7)', 'center', 700, false);
+  if (K.touch && mode === 1 && state === 'play') { ctx.fillStyle = 'rgba(255,201,60,.18)'; K.rr(W - 130, H - 60, 116, 46, 12); ctx.fill(); K.text(`BOOST ${bikes[0].boosts}`, W - 72, H - 37, 15, C.lemon); }
+  if (startIn > 0 && state === 'play') { K.text(startIn > .4 ? `Round ${round}` : 'Go!', W / 2, H / 2, 46, C.cream); }
+  if (roundEnd && state === 'play') K.text(roundMsg, W / 2, H / 2, 34, C.cream);
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(12,10,29,.82)'; ctx.fillRect(0, 0, W, H);
+    const w = bikes[0].wins >= WINS ? 0 : 1;
+    K.text(mode === 1 ? (w === 0 ? 'You win!' : 'CPU wins') : `Player ${w + 1} wins!`, W / 2, 140, 60, bikes[w].color);
+    K.text(`${bikes[0].wins} – ${bikes[1].wins}`, W / 2, 196, 26, C.cream);
+    if (K.t - endAt > .5) {
+      if (K.button(W / 2 - 210, 250, 190, 58, 'Rematch', { key: 'Enter' }) || K.hit('Enter', 'Space')) newMatch(mode);
+      if (K.button(W / 2 + 20, 250, 190, 58, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

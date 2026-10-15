@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Brick Bash</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#22163f}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 640, H: 480 }), { ctx, C } = K, W = 640, H = 480;
+const COLS = 10, BW = 56, BH = 22, GAP = 4, BX0 = (W - (COLS * (BW + GAP) - GAP)) / 2, BY0 = 64, PY = 446;
+const HP_COL = { 1: C.lemon, 2: C.mint, 3: C.gum, 9: '#8d8aa6' };
+let state = 'menu', level, lives, score, paddle, balls, bricks, caps, endAt = 0, banner = '', bannerT = 0, slowT = 0, lastMouseX = null;
+
+function pattern(n) {
+  const rows = [];
+  const R = Math.min(8, 4 + Math.floor(n / 2));
+  for (let r = 0; r < R; r++) {
+    const row = [];
+    for (let c = 0; c < COLS; c++) {
+      const m = Math.min(c, COLS - 1 - c);
+      let v = 0;
+      switch (n % 5) {
+        case 1: v = 1 + (r < 2 ? 1 : 0); break;
+        case 2: v = (r + c) % 2 ? 2 : 1; break;
+        case 3: v = m >= r - 1 ? 1 + (r % 3 === 0 ? 1 : 0) : 0; break;
+        case 4: v = Math.abs(c - 4.5) + Math.abs(r - R / 2) < R / 2 + 2 ? (r === Math.floor(R / 2) && m > 1 && m < 4 ? 9 : 2) : 1; break;
+        case 0: v = (c % 3 === 1 && r % 2) ? (n > 5 ? 9 : 3) : 1 + ((r + m) % 3 === 0 ? 2 : 0); break;
+      }
+      if (n > 5 && v && v < 3 && Math.random() < .25) v++;
+      row.push(v);
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+function loadLevel() {
+  bricks = [];
+  pattern(level).forEach((row, r) => row.forEach((v, c) => { if (v) bricks.push({ x: BX0 + c * (BW + GAP), y: BY0 + r * (BH + GAP), hp: v, max: v, hit: 0 }); }));
+  caps = []; resetBall(); banner = `Level ${level}`; bannerT = 1.6;
+}
+function resetBall() { balls = [{ x: paddle.x, y: PY - 14, vx: 0, vy: 0, r: 7, stuck: true, off: 0 }]; slowT = 0; }
+function newGame() {
+  level = 1; lives = 3; score = 0; paddle = { x: W / 2, w: 96, wide: 0 };
+  loadLevel(); state = 'play'; K.playing = true;
+}
+const speed = () => Math.min(620, 360 + level * 18) * (slowT > 0 ? .7 : 1);
+function launch(b) { const a = K.rnd(-.35, .35) - Math.PI / 2; b.vx = Math.cos(a) * speed(); b.vy = Math.sin(a) * speed(); b.stuck = false; K.sfx(520, .06, 'square', .04); }
+
+function update(dt) {
+  bannerT -= dt;
+  if (state !== 'play') return;
+  // paddle
+  const pw = paddle.wide > 0 ? 148 : 96; paddle.w = K.lerp(paddle.w, pw, Math.min(1, dt * 10)); paddle.wide -= dt; slowT -= dt;
+  const kx = (K.key('KeyD', 'ArrowRight') ? 1 : 0) - (K.key('KeyA', 'ArrowLeft') ? 1 : 0);
+  if (kx) { paddle.x += kx * 560 * dt; lastMouseX = K.mouse ? K.mouse.x : null; }
+  else {
+    const p = K.pointers()[0];
+    if (p) paddle.x = p.x;
+    else if (K.mouse && !K.touch && K.mouse.x !== lastMouseX) { paddle.x = K.mouse.x; lastMouseX = K.mouse.x; }
+  }
+  paddle.x = K.clamp(paddle.x, paddle.w / 2 + 6, W - paddle.w / 2 - 6);
+  if (K.hit('Space', 'Enter', 'KeyW', 'ArrowUp') || K.tapped()) balls.filter(b => b.stuck).forEach(launch);
+
+  for (const b of balls) {
+    if (b.stuck) { b.x = paddle.x + b.off; b.y = PY - b.r - 7; continue; }
+    // keep the speed in line with slow-mo and level
+    const sp = Math.hypot(b.vx, b.vy), want = speed(); b.vx *= want / sp; b.vy *= want / sp;
+    const steps = Math.ceil(want * dt / 5);
+    for (let s = 0; s < steps && !b.dead; s++) {
+      const h = dt / steps;
+      b.x += b.vx * h; b.y += b.vy * h;
+      if (b.x < b.r + 4) { b.x = b.r + 4; b.vx = Math.abs(b.vx); tick(); }
+      if (b.x > W - b.r - 4) { b.x = W - b.r - 4; b.vx = -Math.abs(b.vx); tick(); }
+      if (b.y < b.r + 36) { b.y = b.r + 36; b.vy = Math.abs(b.vy); tick(); }
+      if (b.vy > 0 && b.y + b.r > PY - 7 && b.y < PY + 7 && Math.abs(b.x - paddle.x) < paddle.w / 2 + b.r) {
+        const off = K.clamp((b.x - paddle.x) / (paddle.w / 2), -1, 1), a = -Math.PI / 2 + off * 1.05;
+        b.vx = Math.cos(a) * want; b.vy = Math.sin(a) * want; b.y = PY - 7 - b.r;
+        K.sfx(330, .05, 'square', .04);
+      }
+      if (b.y > H + 20) { b.dead = true; break; }
+      for (const br of bricks) {
+        if (br.hp <= 0) continue;
+        const cx = K.clamp(b.x, br.x, br.x + BW), cy = K.clamp(b.y, br.y, br.y + BH);
+        if ((b.x - cx) ** 2 + (b.y - cy) ** 2 > b.r * b.r) continue;
+        const ox = Math.min(b.x + b.r - br.x, br.x + BW - (b.x - b.r)), oy = Math.min(b.y + b.r - br.y, br.y + BH - (b.y - b.r));
+        if (ox < oy) { b.vx = b.x < br.x + BW / 2 ? -Math.abs(b.vx) : Math.abs(b.vx); }
+        else { b.vy = b.y < br.y + BH / 2 ? -Math.abs(b.vy) : Math.abs(b.vy); }
+        hitBrick(br);
+        break;
+      }
+    }
+  }
+  balls = balls.filter(b => !b.dead);
+  if (!balls.length) {
+    lives--; K.shake(.5); K.sfx(200, .5, 'sawtooth', .05, -150);
+    if (lives <= 0) { state = 'over'; endAt = K.t; K.playing = false; K.saveBest('bricks', score); K.submit(score); return; }
+    resetBall(); paddle.wide = 0;
+  }
+  // capsules
+  for (const c of caps) {
+    c.y += 130 * dt; c.r += dt * 2;
+    if (c.y > PY - 12 && c.y < PY + 12 && Math.abs(c.x - paddle.x) < paddle.w / 2 + 12) { c.dead = true; power(c.type); }
+    if (c.y > H + 20) c.dead = true;
+  }
+  caps = caps.filter(c => !c.dead);
+  for (const br of bricks) br.hit = Math.max(0, br.hit - dt);
+  if (!bricks.some(b => b.hp > 0 && b.hp !== 9)) {
+    score += 500 + lives * 100; level++; K.jingle([523, 659, 784, 1046], 100, 'square', .04); loadLevel();
+  }
+}
+function tick() { K.sfx(700, .02, 'triangle', .02); }
+function hitBrick(br) {
+  br.hit = .12;
+  if (br.hp === 9) { K.sfx(1200, .04, 'square', .02); return; }
+  br.hp--; score += 10 * level;
+  K.sfx(440 + br.hp * 120, .06, 'square', .035);
+  if (br.hp <= 0) {
+    score += 40;
+    K.burst(br.x + BW / 2, br.y + BH / 2, 12, [HP_COL[br.max], C.cream], 160, .5, 3, 300);
+    if (Math.random() < .14) caps.push({ x: br.x + BW / 2, y: br.y + BH / 2, type: K.pick(['donut', 'cherry', 'icecream', 'candy']), r: 0 });
+  }
+}
+function power(type) {
+  K.jingle([660, 880, 1100], 50, 'triangle', .045); score += 50;
+  if (type === 'donut') paddle.wide = 12;
+  if (type === 'cherry') { const src = balls.find(b => !b.stuck) || balls[0]; for (const a of [-.5, .5]) { const sp = speed(), ang = Math.atan2(src.vy || -1, src.vx) + a; balls.push({ x: src.x, y: src.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: 7, stuck: false }); } }
+  if (type === 'icecream') slowT = 10;
+  if (type === 'candy') lives = Math.min(6, lives + 1);
+}
+
+function back() {
+  ctx.fillStyle = '#22163f'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,.03)'; for (let y = 0; y < H; y += 32) for (let x = (y / 32 % 2) * 32; x < W; x += 64) ctx.fillRect(x, y, 32, 32);
+  ctx.fillStyle = C.ink; ctx.fillRect(0, 0, W, 36); ctx.fillRect(0, 36, 4, H); ctx.fillRect(W - 4, 36, 4, H);
+}
+function drawBrick(br) {
+  if (br.hp <= 0) return;
+  const col = br.hit > 0 ? '#fff' : HP_COL[br.hp === 9 ? 9 : br.hp];
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; K.rr(br.x + 3, br.y + 4, BW, BH, 5); ctx.fill();
+  ctx.fillStyle = col; K.rr(br.x, br.y, BW, BH, 5); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.fillRect(br.x + 5, br.y + 4, BW - 10, 3);
+  if (br.hp === 9) { ctx.fillStyle = 'rgba(0,0,0,.25)'; for (const x of [10, BW - 14]) K.circle(br.x + x + 2, br.y + BH / 2, 2.5, 'rgba(21,19,31,.5)'); }
+  else if (br.hp < br.max) { ctx.strokeStyle = 'rgba(21,19,31,.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(br.x + BW * .3, br.y + 3); ctx.lineTo(br.x + BW * .42, br.y + BH * .55); ctx.lineTo(br.x + BW * .36, br.y + BH - 3); ctx.moveTo(br.x + BW * .42, br.y + BH * .55); ctx.lineTo(br.x + BW * .6, br.y + BH * .6); ctx.stroke(); }
+}
+function drawPaddle() {
+  const x = paddle.x - paddle.w / 2;
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; K.rr(x + 3, PY - 5, paddle.w, 14, 7); ctx.fill();
+  ctx.fillStyle = paddle.wide > 0 ? C.gum : C.lemon; K.rr(x, PY - 7, paddle.w, 14, 7); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(x + 8, PY - 4, paddle.w - 16, 2.5);
+  for (const e of [-1, 1]) K.circle(paddle.x + e * 8, PY + 1, 2, C.ink);
+}
+
+function draw() {
+  back();
+  if (state === 'menu') {
+    level = 4; if (!bricks) { paddle = { x: W / 2, w: 96 }; loadLevel(); }
+    bricks.forEach(drawBrick);
+    ctx.fillStyle = 'rgba(34,22,63,.6)'; ctx.fillRect(0, 0, W, H);
+    K.text('Brick Bash', W / 2, 150, 70, C.cream);
+    K.text('Smash every brick. Catch the snacks.', W / 2, 202, 18, C.lemon, 'center', 700);
+    if (K.button(W / 2 - 100, 240, 200, 60, 'Play', { key: 'Enter' }) || K.hit('Enter', 'Space')) newGame();
+    K.text(K.touch ? 'Drag to move, tap to launch' : 'Mouse or ← → to move · Space to launch', W / 2, 340, 15, C.cream, 'center', 700, false);
+    [['donut', 'wide'], ['cherry', 'multi'], ['icecream', 'slow-mo'], ['candy', '+1 life']].forEach(([s, l], i) => { const x = W / 2 - 180 + i * 120; K.snack(s, x, 392, 13); K.text(l, x, 420, 12, C.cream, 'center', 700, false); });
+    const b = K.best('bricks'); if (b) K.text(`Best ${b.toLocaleString()}`, W / 2, 452, 13, C.lemon, 'center', 700, false);
+    return;
+  }
+  bricks.forEach(drawBrick);
+  for (const c of caps) { K.circle(c.x, c.y, 15, 'rgba(255,244,224,.15)'); K.snack(c.type, c.x, c.y, 11, Math.sin(c.r * 3) * .4); }
+  drawPaddle();
+  for (const b of balls) { K.circle(b.x + 2, b.y + 3, b.r, 'rgba(0,0,0,.3)'); K.circle(b.x, b.y, b.r, slowT > 0 ? '#bfe8ff' : C.cream, C.ink, 2); K.circle(b.x - 2, b.y - 2, 2, '#fff'); }
+  K.drawParts();
+  K.text(score.toLocaleString(), 14, 18, 18, C.cream, 'left', 800, false);
+  K.text(`Level ${level}`, W / 2, 18, 15, C.lemon, 'center', 800, false);
+  for (let i = 0; i < lives; i++) K.circle(W - 20 - i * 18, 18, 6, C.cream, C.ink, 2);
+  if (balls.some(b => b.stuck) && state === 'play') K.text(K.touch ? 'Tap to launch' : 'Space or click to launch', W / 2, PY - 60, 16, C.cream, 'center', 700);
+  if (bannerT > 0 && state === 'play') { ctx.globalAlpha = Math.min(1, bannerT * 2); K.text(banner, W / 2, 300, 40, C.cream); ctx.globalAlpha = 1; }
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(34,22,63,.82)'; ctx.fillRect(0, 0, W, H);
+    K.text('Game over', W / 2, 160, 56, C.tomato);
+    K.text(`${score.toLocaleString()} points · level ${level}`, W / 2, 216, 22, C.cream, 'center', 700);
+    const best = K.best('bricks');
+    K.text(score >= best && score > 0 ? 'New best!' : `Best ${best.toLocaleString()}`, W / 2, 250, 16, C.lemon, 'center', 700);
+    if (K.t - endAt > .6) {
+      if (K.button(W / 2 - 210, 290, 190, 56, 'Play again', { key: 'Enter' }) || K.hit('Enter', 'Space')) newGame();
+      if (K.button(W / 2 + 20, 290, 190, 56, 'Menu', { bg: C.mint }) || K.hit('Escape')) { state = 'menu'; bricks = null; }
+    }
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

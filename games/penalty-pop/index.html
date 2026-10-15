@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Penalty Pop</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#1b3a2a}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 800, H: 450 }), { ctx, C } = K, W = 800, H = 450;
+const GL = 262, GR = 538, CB = 104, GLINE = 232, SPOT = { x: 400, y: 392 }, KICKS = 5;
+const PCOL = [C.lemon, C.sky];
+let state = 'menu', mode = 1, kick, phase, aimX, aimY, t0, ball, keeper, result, resultAt, goals, shots, history, endAt = 0, saves = 0;
+
+function newMatch(m) {
+  mode = m; kick = 0; goals = [0, 0]; shots = [0, 0]; history = [[], []]; saves = 0;
+  setup(); state = 'play'; K.playing = true;
+}
+const shooter = () => kick % 2, keeperP = () => 1 - kick % 2;
+const isCpu = p => mode === 1 && p === 1;
+function setup() {
+  phase = 'aimX'; t0 = K.t; aimX = 400; aimY = GLINE;
+  ball = { x: SPOT.x, y: SPOT.y, r: 14, fly: 0 };
+  keeper = { x: 400, act: null, at: 0, decided: false, cpuAt: K.rnd(.12, .34) };
+  result = null;
+  if (isCpu(shooter())) { cpuShot = { x: K.rnd(GL - 20, GR + 20), y: K.rnd(CB - 20, GLINE - 10), lockX: K.rnd(.6, 1.4) }; }
+}
+let cpuShot = null;
+function lockX() { phase = 'aimY'; t0 = K.t; K.sfx(500, .05, 'square', .04); }
+function lockY() {
+  phase = 'fly'; t0 = K.t; K.sfx(180, .12, 'square', .07); K.noise(.12, .07, 2500);
+  ball.tx = aimX; ball.ty = aimY;
+}
+function keeperMove(dir) {
+  if (keeper.decided || phase !== 'fly') return;
+  keeper.decided = true; keeper.act = dir; keeper.at = K.t;
+}
+const zoneOf = x => x < 400 - 58 ? 'left' : x > 400 + 58 ? 'right' : 'center';
+function resolve() {
+  const s = shooter(), k = keeperP(); shots[s]++;
+  const { tx, ty } = ball;
+  let out;
+  if (ty < CB - 6) out = 'over';
+  else if (tx < GL - 6 || tx > GR + 6) out = 'wide';
+  else if (Math.abs(tx - GL) < 7 || Math.abs(tx - GR) < 7 || Math.abs(ty - CB) < 6) out = 'post';
+  else {
+    const z = zoneOf(tx), top = (Math.abs(tx - GL) < 34 || Math.abs(tx - GR) < 34) && ty < CB + 34;
+    const correct = (keeper.act || 'center') === z;
+    out = correct && !(top && Math.random() < .7) ? 'saved' : 'goal';
+  }
+  result = out; resultAt = K.t; phase = 'result';
+  history[s].push(out === 'goal');
+  if (out === 'goal') { goals[s]++; K.jingle([523, 659, 784], 70, 'square', .045); K.burst(tx, ty, 30, [PCOL[s], C.cream, C.gum], 260, .8, 4); K.shake(.3); }
+  else if (out === 'saved') { if (k === 0 && mode === 1) saves++; K.sfx(260, .25, 'triangle', .06, -120); K.burst(tx, ty, 14, [C.cream], 160, .4, 3); }
+  else { K.sfx(160, .3, 'sawtooth', .04, -80); if (out === 'post') K.sfx(1400, .25, 'triangle', .05, -900); }
+}
+function decided() {
+  // after five each (or earlier if one side can't catch up); sudden death after that
+  const [a, b] = goals, [sa, sb] = shots;
+  if (sa <= KICKS && sb <= KICKS) {
+    if (a > b + (KICKS - sb)) return 0;
+    if (b > a + (KICKS - sa)) return 1;
+    if (sa === KICKS && sb === KICKS) return a === b ? -1 : a > b ? 0 : 1;
+    return -1;
+  }
+  if (sa === sb && a !== b) return a > b ? 0 : 1;
+  return -1;
+}
+
+function update(dt) {
+  if (state !== 'play') return;
+  const s = shooter(), k = keeperP();
+  const shootKey = mode === 1 ? ['Space', 'Enter'] : s === 0 ? ['Space', 'KeyF'] : ['Enter', 'Slash'];
+  const tapShoot = K.tapped();
+  if (phase === 'aimX') {
+    aimX = 400 + Math.sin((K.t - t0) * 2.6) * (GR - GL) * .62;
+    if (isCpu(s)) { if (K.t - t0 > cpuShot.lockX && Math.abs(aimX - cpuShot.x) < 18) lockX(); }
+    else if (K.hit(...shootKey) || tapShoot) lockX();
+  } else if (phase === 'aimY') {
+    aimY = GLINE - (1 - Math.cos((K.t - t0) * 3.4)) / 2 * (GLINE - CB + 34);
+    if (isCpu(s)) { if (Math.abs(aimY - cpuShot.y) < 10) lockY(); }
+    else if (K.hit(...shootKey) || tapShoot) lockY();
+  } else if (phase === 'fly') {
+    const p = Math.min(1, (K.t - t0) / .5);
+    const e = 1 - (1 - p) * (1 - p);
+    ball.x = K.lerp(SPOT.x, ball.tx, e); ball.y = K.lerp(SPOT.y, ball.ty, e) - Math.sin(p * Math.PI) * 26; ball.r = K.lerp(14, 8, e); ball.spin = (ball.spin || 0) + dt * 18;
+    if (isCpu(k)) {
+      if (!keeper.decided && K.t - t0 > keeper.cpuAt) {
+        const z = zoneOf(ball.tx);
+        keeperMove(Math.random() < (z === 'center' ? .55 : .42) ? z : K.pick(['left', 'right', 'center'].filter(x => x !== z)));
+      }
+    } else {
+      const keys = mode === 1 ? { left: ['ArrowLeft', 'KeyA'], right: ['ArrowRight', 'KeyD'], center: ['ArrowUp', 'KeyW', 'ArrowDown', 'KeyS'] }
+        : k === 0 ? { left: ['KeyA'], right: ['KeyD'], center: ['KeyW', 'KeyS'] } : { left: ['ArrowLeft'], right: ['ArrowRight'], center: ['ArrowUp', 'ArrowDown'] };
+      for (const d of ['left', 'right', 'center']) if (K.hit(...keys[d])) keeperMove(d);
+      for (const t of K.taps()) keeperMove(t.x < W / 3 ? 'left' : t.x > W * 2 / 3 ? 'right' : 'center');
+    }
+    if (p >= 1) resolve();
+  } else if (phase === 'result') {
+    if (K.t - resultAt > 1.5) {
+      kick++;
+      const w = decided();
+      if (w >= 0) {
+        state = 'over'; endAt = K.t; K.playing = false; winner = w;
+        if (mode === 1) { const sc = goals[0] * 200 + saves * 150 + (w === 0 ? 1000 : 0); K.saveBest('penalty', sc); K.submit(sc); }
+      } else setup();
+    }
+  }
+  // keeper animation
+  if (keeper.act) { const tx = { left: 318, right: 482, center: 400 }[keeper.act]; keeper.x = K.lerp(keeper.x, tx, Math.min(1, dt * 12)); }
+}
+let winner = 0;
+
+function scene() {
+  ctx.fillStyle = '#121a2e'; ctx.fillRect(0, 0, W, 170);
+  // crowd
+  const cols = ['#ff5a36', '#ffc93c', '#2ee6c1', '#ff5da2', '#4fc3f7', '#fff4e0', '#8e6cf0'];
+  for (let r = 0; r < 6; r++) for (let i = 0; i < 46; i++) { const x = i * 18 + (r % 2) * 9, y = 18 + r * 20 + Math.sin(K.t * 6 + i + r) * (result === 'goal' && K.t - resultAt < 1.5 ? 4 : .8); K.circle(x, y, 6, cols[(i * 7 + r * 3) % cols.length]); }
+  ctx.fillStyle = '#0e1424'; ctx.fillRect(0, 140, W, 32);
+  ctx.fillStyle = '#fff4e0'; ctx.font = '800 14px ' + K.FONT; ctx.textAlign = 'center'; for (let x = 60; x < W; x += 200) ctx.fillText('SNACKBAR', x, 160);
+  // pitch
+  ctx.fillStyle = '#2f8a46'; ctx.fillRect(0, 172, W, H - 172);
+  ctx.fillStyle = '#36984f'; for (let y = 172; y < H; y += 40) ctx.fillRect(0, y, W, 20);
+  ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(0, GLINE); ctx.lineTo(W, GLINE); ctx.moveTo(150, GLINE); ctx.lineTo(110, 330); ctx.lineTo(690, 330); ctx.lineTo(650, GLINE); ctx.stroke();
+  K.circle(SPOT.x, SPOT.y + 6, 4, 'rgba(255,255,255,.8)');
+  // goal + net
+  ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(GL, CB, GR - GL, GLINE - CB);
+  ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = 1;
+  ctx.beginPath(); for (let x = GL; x <= GR; x += 14) { ctx.moveTo(x, CB); ctx.lineTo(x + (x - 400) * .06, GLINE - 14); } for (let y = CB; y <= GLINE - 10; y += 12) { ctx.moveTo(GL, y); ctx.lineTo(GR, y); } ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+  for (const r of [[GL - 8, CB - 8, 8, GLINE - CB + 8], [GR, CB - 8, 8, GLINE - CB + 8], [GL - 8, CB - 8, GR - GL + 16, 8]]) { ctx.fillRect(...r); ctx.strokeRect(...r); }
+}
+function drawKeeper() {
+  const p = keeperP(), dive = keeper.act && keeper.act !== 'center' ? Math.min(1, (K.t - keeper.at) * 6) : 0;
+  const jump = keeper.act === 'center' ? Math.sin(Math.min(1, (K.t - keeper.at) * 3) * Math.PI) * 18 : 0;
+  const dir = keeper.act === 'left' ? -1 : 1;
+  ctx.save(); ctx.translate(keeper.x, GLINE - 34 - jump - dive * 18); ctx.rotate(dir * dive * 1.25);
+  ctx.fillStyle = 'rgba(0,0,0,.25)'; if (!dive) { ctx.beginPath(); ctx.ellipse(0, 34 + jump, 22, 5, 0, 0, Math.PI * 2); ctx.fill(); }
+  // legs
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 7; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-8, 10); ctx.lineTo(-11, 32); ctx.moveTo(8, 10); ctx.lineTo(11, 32); ctx.stroke();
+  // arms up with big gloves
+  ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(-14, -12); ctx.lineTo(-30, -30); ctx.moveTo(14, -12); ctx.lineTo(30, -30); ctx.stroke();
+  K.circle(-32, -33, 8, C.lime, C.ink, 2.5); K.circle(32, -33, 8, C.lime, C.ink, 2.5);
+  K.rr(-17, -22, 34, 36, 12); ctx.fillStyle = PCOL[p]; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+  K.text('1', 0, -3, 15, C.ink, 'center', 800, false);
+  K.circle(0, -36, 13, '#f2c094', C.ink, 3);
+  K.circle(-4, -37, 2, C.ink); K.circle(4, -37, 2, C.ink);
+  ctx.restore();
+}
+function drawBall() {
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(ball.x, phase === 'fly' || phase === 'result' ? K.lerp(SPOT.y, ball.ty, Math.min(1, (K.t - t0) / .5)) + ball.r * .9 : SPOT.y + ball.r * .9, ball.r, ball.r * .35, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.translate(ball.x, ball.y); ctx.rotate(ball.spin || 0);
+  K.circle(0, 0, ball.r, '#fff', C.ink, 2.5);
+  ctx.fillStyle = C.ink; ctx.beginPath(); for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2 - Math.PI / 2; ctx.lineTo(Math.cos(a) * ball.r * .38, Math.sin(a) * ball.r * .38); } ctx.fill();
+  for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2 - Math.PI / 2; K.circle(Math.cos(a) * ball.r * .85, Math.sin(a) * ball.r * .85, ball.r * .2, C.ink); }
+  ctx.restore();
+}
+function name(p) { return mode === 1 ? (p ? 'CPU' : 'You') : `Player ${p + 1}`; }
+function scoreboard() {
+  ctx.fillStyle = 'rgba(14,20,36,.92)'; K.rr(W / 2 - 170, 6, 340, 62, 12); ctx.fill();
+  [0, 1].forEach(p => {
+    const y = 24 + p * 26;
+    K.text(name(p), W / 2 - 156, y, 14, PCOL[p], 'left', 800, false);
+    const n = Math.max(KICKS, history[p].length);
+    for (let i = 0; i < n; i++) { const v = history[p][i]; K.circle(W / 2 - 60 + i * 20, y, 7, v === undefined ? 'rgba(255,255,255,.15)' : v ? C.mint : C.tomato, v === undefined ? null : C.ink, 2); }
+    K.text(String(goals[p]), W / 2 + 150, y, 18, C.cream, 'right', 800, false);
+  });
+}
+
+function draw() {
+  scene();
+  if (state === 'menu') {
+    keeper = keeper || { x: 400, act: null }; ball = ball || { x: SPOT.x, y: SPOT.y, r: 14 };
+    keeper.x = 400 + Math.sin(K.t * 2) * 20; history = history || [[], []];
+    const saveK = keeper.act; keeper.act = null; kick = 0; drawKeeper(); keeper.act = saveK; drawBall();
+    ctx.fillStyle = 'rgba(14,20,36,.55)'; ctx.fillRect(0, 0, W, H);
+    K.text('Penalty Pop', W / 2, 92, 70, C.cream);
+    K.text('Five kicks each. Pick your spot, then guess theirs.', W / 2, 142, 18, C.lemon, 'center', 700);
+    if (K.button(W / 2 - 220, 176, 200, 60, 'vs CPU', { key: '1' }) || K.hit('Digit1')) newMatch(1);
+    if (K.button(W / 2 + 20, 176, 200, 60, '2 Players', { key: '2', bg: C.sky }) || K.hit('Digit2')) newMatch(2);
+    if (!K.touch) {
+      K.text('Shooting: press once to aim across, again for height.', W / 2, 282, 15, C.cream, 'center', 700, false);
+      K.text('Keeping: dive left, stay in the middle, or dive right.', W / 2, 306, 15, C.cream, 'center', 700, false);
+      K.text('Player 1', W / 2 - 150, 346, 14, C.lemon); K.keycap(W / 2 - 202, 378, 'Space', 60); ['A', 'W', 'D'].forEach((k, i) => K.keycap(W / 2 - 140 + i * 34, 378, k));
+      K.text('Player 2', W / 2 + 150, 346, 14, C.sky); K.keycap(W / 2 + 96, 378, 'Enter', 60); ['←', '↑', '→'].forEach((k, i) => K.keycap(W / 2 + 158 + i * 34, 378, k));
+    } else K.text('Tap to aim, tap again for height. In goal, tap left, middle or right.', W / 2, 300, 15, C.cream, 'center', 700);
+    return;
+  }
+  drawKeeper(); drawBall();
+  scoreboard();
+  const s = shooter(), k = keeperP();
+  if (phase === 'aimX' || phase === 'aimY') {
+    // aiming guide
+    ctx.strokeStyle = 'rgba(255,244,224,.85)'; ctx.lineWidth = 3; ctx.setLineDash([6, 6]);
+    if (phase === 'aimX') { ctx.beginPath(); ctx.moveTo(aimX, CB - 30); ctx.lineTo(aimX, GLINE + 6); ctx.stroke(); }
+    else { ctx.beginPath(); ctx.moveTo(aimX - 30, aimY); ctx.lineTo(aimX + 30, aimY); ctx.stroke(); }
+    ctx.setLineDash([]);
+    K.circle(aimX, phase === 'aimX' ? (CB + GLINE) / 2 : aimY, 11, null, PCOL[s], 4);
+    const who = isCpu(s) ? 'CPU is lining it up…' : `${name(s)}: ${phase === 'aimX' ? 'pick a side' : 'now the height'}`;
+    K.banner(who, W / 2, 268, 18, PCOL[s]);
+    if (!isCpu(k)) K.text(`${name(k)} in goal: get ready to dive`, W / 2, 432, 14, 'rgba(255,244,224,.85)', 'center', 700);
+  }
+  if (phase === 'fly' && !isCpu(k) && !keeper.decided) K.banner('DIVE!', W / 2, 268, 22, PCOL[k]);
+  if (phase === 'result') {
+    const txt = { goal: 'GOAL!', saved: 'Saved!', wide: 'Wide!', over: 'Over the bar!', post: 'Off the post!' }[result];
+    K.banner(txt, W / 2, 290, 40, result === 'goal' ? C.mint : result === 'saved' ? PCOL[k] : C.tomato);
+  }
+  K.drawParts();
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(14,20,36,.82)'; ctx.fillRect(0, 0, W, H);
+    K.text(mode === 1 ? (winner === 0 ? 'You win the shootout!' : 'CPU wins it') : `Player ${winner + 1} wins!`, W / 2, 150, 48, PCOL[winner]);
+    K.text(`${goals[0]} – ${goals[1]}`, W / 2, 204, 28, C.cream);
+    if (K.t - endAt > .6) {
+      if (K.button(W / 2 - 210, 250, 190, 56, 'Rematch', { key: 'Enter' }) || K.hit('Enter', 'Space')) newMatch(mode);
+      if (K.button(W / 2 + 20, 250, 190, 56, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

@@ -2,7 +2,17 @@
 
 Bite-sized browser games, with XP for playing *and* making them. A modern take on the old Miniclip idea: open a page, hit play, no installs.
 
-- **Three original starter games** — *Gobble Grid* (maze chase), *Bunker Blitz* (raycast FPS shooter) and *Cave Hopper* (one-button flyer).
+- **Twenty original games**, at least two in every category. Eleven have a **2-player mode on one keyboard** (or co-op), and most of those also play against a CPU:
+  - **Arcade:** Gobble Grid (maze chase), Brick Bash (breakout).
+  - **Action:** Sumo Slam (2P), Snack Attack (2P co-op arena).
+  - **Shooters:** Bunker Blitz (raycast FPS), Sky Swarm (2P co-op shmup).
+  - **Puzzle:** Snack Merge (merge tiles), Memory Munch (2P).
+  - **Racing:** Turbo Laps (2P, three tracks), Lane Rush (2P split-screen).
+  - **Sports:** Paddle Pals (2P), Penalty Pop (2P).
+  - **Platformers:** Jelly Jump, Bun Run.
+  - **Strategy:** Four Up (2P, three CPU levels), Dot Boxes (2P).
+  - **Casual:** Cave Hopper, Stack Snack.
+  - **Multiplayer:** Tank Tussle, Light Trails.
 - **Uploads in five formats** — zipped HTML5 builds, single `.html` files, GitHub repos, Unity WebGL builds and hosted URLs.
 - **XP, levels, badges and leaderboards** — earned for playing, scoring, liking, publishing, and when other people play or like your games. Every award is logged so real rewards can be added later.
 - **Sandboxed by design** — games are served from a separate origin, so uploaded code can never touch the site's cookies or API.
@@ -56,7 +66,9 @@ npm run import-github -- https://github.com/you/games/tree/main/puzzler --aspect
 Options: `--title --description --instructions --category --tags "a,b" --branch --subdir --aspect --featured`.
 The importer looks for `index.html` in the repo root, `dist/`, `build/`, `docs/`, `public/`, `www/` or `web/`. Repos that need a build step must commit their built output. Set `GITHUB_TOKEN` for private repos or to avoid GitHub's anonymous rate limit.
 
-**As a folder:** drop a folder into `games/` containing `index.html` and a `game.json` (copy one of the starter games' manifests) and restart. It is registered automatically.
+**As a folder:** drop a folder into `games/` containing `index.html` and a `game.json` (copy one of the starter games' manifests) and restart. It is registered automatically. Add the tag `2-player` and it shows up in the home page's two-player shelf with a 2P badge.
+
+**The game kit:** the built-in games share `games/_kit/kit.js` (served at `/kit/kit.js` on the games origin): a scaling canvas, keyboard/mouse/multi-touch input, virtual sticks and swipes, synth sound effects, particles, pause on blur, best scores, immediate-mode buttons and a set of hand-drawn snacks. `/kit/kit.css` loads the site font from the games origin, so no game needs Google Fonts. Hand-drawn covers for built-ins live in `public/js/art.js` and `public/js/covers.js`.
 
 **Through the site:** anyone signed in can use `/upload`.
 

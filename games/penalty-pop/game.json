@@ -1,0 +1,17 @@
+{
+  "title": "Penalty Pop",
+  "description": "Five penalties each, then sudden death. When you're shooting, stop the moving aim for your side, then again for height. Aim for the top corners, but don't sky it. When you're in goal, guess which way they went and dive. Against the CPU or a mate on the same keyboard.",
+  "instructions": "Shooting: press once to set the side, again to set the height (Player 1 Space, Player 2 Enter). In goal: Player 1 uses A/W/D, Player 2 uses the left, up and right arrows to dive left, stay in the middle, or dive right. On a phone, tap to shoot and tap left, middle or right to dive.",
+  "category": "sports",
+  "tags": [
+    "2-player",
+    "football",
+    "soccer",
+    "penalties"
+  ],
+  "aspect": "16:9",
+  "accent": "#4fc3f7",
+  "seed": 94,
+  "featured": false,
+  "order": 17
+}

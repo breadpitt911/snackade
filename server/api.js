@@ -142,6 +142,7 @@ api.get('/home', (_req, res) => {
     fresh: listGames('', 'g.created_at DESC', 12),
     community: listGames('g.author_id IS NOT NULL', 'g.created_at DESC', 12),
     loved: listGames('g.likes > 0', 'g.likes DESC', 8),
+    duos: listGames("(',' || g.tags || ',') LIKE '%,2-player,%'", 'g.featured DESC, g.plays DESC, g.created_at ASC', 12),
     categories: counts,
     gotm: (() => { const m = pastWinners(1)[0]; const w = m?.winners.find(x => x.place === 1 && x.status === 'live'); return w ? { month: m.month, game: awardGame(w), avg: w.avg, votes: w.votes } : null; })(),
     race: standings(monthOf(Date.now()), 3).filter(r => r.eligible).map(r => ({ game: awardGame(r), avg: r.avg, votes: r.votes })),

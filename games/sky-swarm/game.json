@@ -1,0 +1,17 @@
+{
+  "title": "Sky Swarm",
+  "description": "A sky full of bugs and they're all heading your way. Your guns fire on their own, so just fly well. Chilis power up your shots, donuts give you a shield, cherries give you a spare ship. Every fifth wave, something big shows up. Bring a co-pilot if you like.",
+  "instructions": "Player 1: WASD. Player 2: arrow keys. Solo pilots can use either. On a phone, drag anywhere to fly. Co-op scores don't go on the leaderboard.",
+  "category": "shooter",
+  "tags": [
+    "2-player",
+    "co-op",
+    "shmup",
+    "waves"
+  ],
+  "aspect": "3:4",
+  "accent": "#ff5da2",
+  "seed": 17,
+  "featured": false,
+  "order": 10
+}

@@ -1,0 +1,17 @@
+{
+  "title": "Bun Run",
+  "description": "A burger bun that will not stop running. Jump the gaps, hop over the forks, and double jump when the next ledge is a bit too far. Hold the button for a higher jump. It speeds up the further you get.",
+  "instructions": "Space, up arrow, click or tap to jump. Hold for a higher jump, and press again in the air for a double jump.",
+  "category": "platformer",
+  "tags": [
+    "runner",
+    "endless",
+    "one-button",
+    "jumping"
+  ],
+  "aspect": "16:9",
+  "accent": "#f0a245",
+  "seed": 116,
+  "featured": false,
+  "order": 19
+}

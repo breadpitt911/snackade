@@ -33,6 +33,7 @@ export async function render(root) {
 
   ${fameBand(d)}
 
+  ${d.duos?.length ? `<section class="section"><div class="wrap">${sectionHead('Two players, one keyboard', 'Grab whoever\'s next to you. Every one of these has a 2-player mode on the same screen.', ['See them all', '/games?q=2-player'])}${shelf(d.duos.slice(0, 10), true)}</div></section>` : ''}
   ${d.popular.length ? `<section class="section"><div class="wrap">${sectionHead('Most played', 'The ones people can\'t put down.', ['See all games', '/games?sort=popular'])}${shelf(d.popular.slice(0, 10), true)}</div></section>` : ''}
 
   <section class="section"><div class="wrap">${sectionHead('Made by players', 'Built by people on here. Give one a go and drop a like, it goes a long way.', d.community.length ? ['All community games', '/games?source=community'] : null)}

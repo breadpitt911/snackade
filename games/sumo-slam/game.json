@@ -1,0 +1,17 @@
+{
+  "title": "Sumo Slam",
+  "description": "Two very round wrestlers, one ring that keeps shrinking. Barge, dash and shove until someone goes over the edge. A chili makes you quick, a donut makes you heavy. Best of five, against the CPU or a friend.",
+  "instructions": "Player 1: WASD to move, Space to dash. Player 2: arrow keys to move, Enter to dash. On a phone, left thumb moves and tapping the right side dashes.",
+  "category": "action",
+  "tags": [
+    "2-player",
+    "physics",
+    "versus",
+    "silly"
+  ],
+  "aspect": "16:9",
+  "accent": "#4fc3f7",
+  "seed": 85,
+  "featured": false,
+  "order": 8
+}

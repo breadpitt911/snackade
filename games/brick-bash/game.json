@@ -1,0 +1,16 @@
+{
+  "title": "Brick Bash",
+  "description": "The classic: bounce the ball, smash the bricks, don't let it past. Tougher bricks take a few hits, steel ones don't break at all. Catch the snacks that drop out for a wide paddle, extra balls, slow-mo or an extra life.",
+  "instructions": "Move with the mouse, or the arrow keys or A/D. Space or click to launch. On a phone, drag to move and tap to launch.",
+  "category": "arcade",
+  "tags": [
+    "breakout",
+    "classic",
+    "levels"
+  ],
+  "aspect": "4:3",
+  "accent": "#ff5da2",
+  "seed": 28,
+  "featured": false,
+  "order": 11
+}

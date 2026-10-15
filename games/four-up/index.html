@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Four Up</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#1d1640}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 640, H: 480 }), { ctx, C } = K, W = 640, H = 480;
+const COLS = 7, ROWS = 6, CS = 60, BX = (W - COLS * CS) / 2, BY = 94;
+const DIFF = { easy: { depth: 2, slop: .35, pts: 300, name: 'Easy' }, normal: { depth: 5, slop: .05, pts: 800, name: 'Normal' }, hard: { depth: 7, slop: 0, pts: 1500, name: 'Hard' } };
+let state = 'menu', mode = 1, diff = 'normal', board, turn = 1, cursor = 3, falling = null, winLine = null, winner = 0, moves = 0, thinking = false, starter = 1, endAt = 0, streak = 0;
+const COLORS = { 1: C.lemon, 2: C.tomato };
+
+function newGame(m, d) {
+  if (m !== undefined) { if (m !== mode || (d && d !== diff)) streak = 0; mode = m; if (d) diff = d; starter = 1; }
+  board = Array.from({ length: COLS }, () => []);
+  turn = starter; winner = 0; winLine = null; moves = 0; falling = null; thinking = false; cursor = 3;
+  state = 'play'; K.playing = true;
+  if (mode === 1 && turn === 2) cpuMove();
+}
+
+// ---------- rules ----------
+const at = (b, c, r) => (c >= 0 && c < COLS && r >= 0 && r < ROWS) ? (b[c][r] || 0) : -1;
+function lineAt(b, c, r) {
+  const p = b[c][r];
+  for (const [dc, dr] of [[1, 0], [0, 1], [1, 1], [1, -1]]) {
+    const cells = [[c, r]];
+    for (let s = 1; at(b, c + dc * s, r + dr * s) === p; s++) cells.push([c + dc * s, r + dr * s]);
+    for (let s = 1; at(b, c - dc * s, r - dr * s) === p; s++) cells.unshift([c - dc * s, r - dr * s]);
+    if (cells.length >= 4) return cells;
+  }
+  return null;
+}
+const full = b => b.every(col => col.length >= ROWS);
+
+// ---------- CPU: negamax with alpha-beta ----------
+const ORDER = [3, 2, 4, 1, 5, 0, 6];
+function evaluate(b, me) {
+  const op = 3 - me; let s = 0;
+  for (let r = 0; r < ROWS; r++) { if (b[3][r] === me) s += 3; else if (b[3][r] === op) s -= 3; }
+  const win = (a1, a2, a3, a4) => {
+    let m = 0, o = 0;
+    for (const v of [a1, a2, a3, a4]) { if (v === me) m++; else if (v === op) o++; }
+    if (m && o) return 0;
+    if (m === 3) return 5; if (m === 2) return 2;
+    if (o === 3) return -4; if (o === 2) return -1;
+    return 0;
+  };
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+    if (c + 3 < COLS) s += win(at(b, c, r), at(b, c + 1, r), at(b, c + 2, r), at(b, c + 3, r));
+    if (r + 3 < ROWS) s += win(at(b, c, r), at(b, c, r + 1), at(b, c, r + 2), at(b, c, r + 3));
+    if (c + 3 < COLS && r + 3 < ROWS) s += win(at(b, c, r), at(b, c + 1, r + 1), at(b, c + 2, r + 2), at(b, c + 3, r + 3));
+    if (c + 3 < COLS && r - 3 >= 0) s += win(at(b, c, r), at(b, c + 1, r - 1), at(b, c + 2, r - 2), at(b, c + 3, r - 3));
+  }
+  return s;
+}
+function negamax(b, depth, alpha, beta, me) {
+  if (full(b)) return 0;
+  if (depth === 0) return evaluate(b, me);
+  let best = -Infinity;
+  for (const c of ORDER) {
+    if (b[c].length >= ROWS) continue;
+    b[c].push(me);
+    let v;
+    if (lineAt(b, c, b[c].length - 1)) v = 10000 + depth;
+    else v = -negamax(b, depth - 1, -beta, -alpha, 3 - me);
+    b[c].pop();
+    if (v > best) best = v;
+    if (v > alpha) alpha = v;
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+function bestMove(b, me) {
+  const d = DIFF[diff];
+  const legal = ORDER.filter(c => b[c].length < ROWS);
+  if (Math.random() < d.slop) return K.pick(legal);
+  let best = legal[0], bestV = -Infinity;
+  for (const c of legal) {
+    b[c].push(me);
+    const v = lineAt(b, c, b[c].length - 1) ? 100000 : -negamax(b, d.depth - 1, -Infinity, Infinity, 3 - me);
+    b[c].pop();
+    if (v > bestV) { bestV = v; best = c; }
+  }
+  return best;
+}
+function cpuMove() {
+  thinking = true;
+  setTimeout(() => {
+    const copy = board.map(col => col.slice());
+    const c = bestMove(copy, 2);
+    thinking = false;
+    drop(c);
+  }, 380);
+}
+
+// ---------- moves ----------
+function drop(c) {
+  if (state !== 'play' || falling || board[c].length >= ROWS) return;
+  const r = board[c].length;
+  falling = { c, r, y: BY - CS / 2, vy: 0, p: turn };
+  K.sfx(500 + c * 30, .05, 'triangle', .03);
+}
+function land() {
+  const { c, r, p } = falling; falling = null;
+  board[c].push(p); moves++;
+  K.sfx(140, .08, 'square', .05); K.burst(BX + c * CS + CS / 2, BY + (ROWS - 1 - r) * CS + CS - 4, 6, [COLORS[p], C.cream], 90, .3, 2);
+  const line = lineAt(board, c, r);
+  if (line) return finish(p, line);
+  if (full(board)) return finish(0, null);
+  turn = 3 - turn;
+  if (mode === 1 && turn === 2) cpuMove();
+}
+function finish(p, line) {
+  winner = p; winLine = line; state = 'over'; endAt = K.t; K.playing = false; starter = 3 - starter;
+  if (p) { K.jingle(p === 1 || mode === 2 ? [523, 659, 784, 1046] : [392, 311, 262], 110, 'square', .04); K.shake(.3); }
+  if (mode === 1) {
+    if (p === 1) { streak++; const myMoves = Math.ceil(moves / 2); const sc = DIFF[diff].pts + Math.max(0, 21 - myMoves) * 20 + (streak - 1) * 100; K.saveBest('fourup', sc); K.submit(sc); }
+    else if (p === 2) streak = 0;
+  }
+}
+
+function update(dt) {
+  if (state !== 'play') return;
+  if (falling) {
+    const target = BY + (ROWS - 1 - falling.r) * CS + CS / 2;
+    falling.vy += 2600 * dt; falling.y += falling.vy * dt;
+    if (falling.y >= target) { falling.y = target; if (falling.vy > 500) { falling.vy *= -.28; } else land(); }
+    return;
+  }
+  const human = mode === 2 || turn === 1;
+  if (!human || thinking) return;
+  if (K.hit('ArrowLeft', 'KeyA')) cursor = (cursor + COLS - 1) % COLS;
+  if (K.hit('ArrowRight', 'KeyD')) cursor = (cursor + 1) % COLS;
+  for (let i = 0; i < COLS; i++) if (K.hit('Digit' + (i + 1))) { cursor = i; drop(i); }
+  if (K.hit('Space', 'Enter', 'ArrowDown', 'KeyS')) drop(cursor);
+  if (K.mouse && !K.touch && K.mouse.y > BY - 70 && K.mouse.y < BY + ROWS * CS) { const c = Math.floor((K.mouse.x - BX) / CS); if (c >= 0 && c < COLS) cursor = c; }
+  for (const t of K.taps()) { const c = Math.floor((t.x - BX) / CS); if (c >= 0 && c < COLS && t.y > BY - 70) { cursor = c; drop(c); } }
+}
+
+function disc(x, y, p, r) {
+  r = r || CS / 2 - 7;
+  K.circle(x + 2, y + 3, r, 'rgba(0,0,0,.35)');
+  K.circle(x, y, r, COLORS[p], C.ink, 3);
+  K.circle(x, y, r * .62, null, 'rgba(0,0,0,.18)', 3);
+  ctx.save(); ctx.translate(x, y); ctx.scale(.35, .35); K.snack(p === 1 ? 'cookie' : 'berry', 0, 0, r * 1.1); ctx.restore();
+  K.circle(x - r * .4, y - r * .45, r * .16, 'rgba(255,255,255,.55)');
+}
+function drawBoard() {
+  // pieces behind the frame
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < board[c].length; r++) disc(BX + c * CS + CS / 2, BY + (ROWS - 1 - r) * CS + CS / 2, board[c][r]);
+  if (falling) disc(BX + falling.c * CS + CS / 2, falling.y, falling.p);
+  // frame with holes
+  ctx.save();
+  ctx.beginPath(); ctx.rect(BX - 12, BY - 10, COLS * CS + 24, ROWS * CS + 22);
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) { const x = BX + c * CS + CS / 2, y = BY + r * CS + CS / 2; ctx.moveTo(x + CS / 2 - 6, y); ctx.arc(x, y, CS / 2 - 6, 0, Math.PI * 2, true); }
+  ctx.fillStyle = '#3346ff'; ctx.fill('evenodd');
+  ctx.restore();
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 4; K.rr(BX - 12, BY - 10, COLS * CS + 24, ROWS * CS + 22, 14); ctx.stroke();
+  for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) K.circle(BX + c * CS + CS / 2, BY + r * CS + CS / 2, CS / 2 - 6, null, C.ink, 3);
+  ctx.fillStyle = '#2433cc'; ctx.fillRect(BX - 30, BY + ROWS * CS + 10, 30, 12); ctx.fillRect(BX + COLS * CS, BY + ROWS * CS + 10, 30, 12);
+}
+
+function draw() {
+  ctx.fillStyle = '#1d1640'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,.03)'; for (let i = 0; i < 12; i++) K.circle((i * 97) % W, (i * 61) % H, 40 + (i % 3) * 20, 'rgba(255,255,255,.025)');
+  if (state === 'menu') {
+    K.text('Four Up', W / 2, 90, 76, C.cream);
+    K.text('Line up four of yours before they do', W / 2, 142, 18, C.lemon, 'center', 700);
+    K.text('vs CPU', W / 2, 196, 16, 'rgba(255,244,224,.75)', 'center', 800, false);
+    [['easy', C.mint], ['normal', C.lemon], ['hard', C.tomato]].forEach(([d, col], i) => {
+      if (K.button(W / 2 - 230 + i * 160, 214, 140, 54, DIFF[d].name, { bg: col, key: String(i + 1) }) || K.hit('Digit' + (i + 1))) newGame(1, d);
+    });
+    if (K.button(W / 2 - 110, 300, 220, 58, '2 Players', { bg: C.gum, key: '4' }) || K.hit('Digit4')) newGame(2);
+    K.text(K.touch ? 'Tap a column to drop' : 'Click a column, or ← → and Space. 1–7 drops straight in.', W / 2, 400, 15, 'rgba(255,244,224,.75)', 'center', 600, false);
+    disc(80, 400, 1, 26); disc(W - 80, 400, 2, 26);
+    return;
+  }
+  drawBoard();
+  // header
+  if (state === 'play') {
+    const human = mode === 2 || turn === 1;
+    if (!falling && human && !thinking) disc(BX + cursor * CS + CS / 2, BY - 44 + Math.sin(K.t * 5) * 3, turn, CS / 2 - 9);
+    const who = mode === 1 ? (turn === 1 ? 'Your turn' : 'CPU is thinking…') : `Player ${turn}’s turn`;
+    K.text(who, W / 2, 26, 20, COLORS[turn], 'center', 800);
+    if (mode === 1) K.text(`${DIFF[diff].name}${streak ? ` · ${streak} win streak` : ''}`, 16, 26, 13, 'rgba(255,244,224,.6)', 'left', 700, false);
+  }
+  if (winLine) {
+    ctx.strokeStyle = C.cream; ctx.lineWidth = 8 + Math.sin(K.t * 8) * 2; ctx.lineCap = 'round';
+    const p = ([c, r]) => [BX + c * CS + CS / 2, BY + (ROWS - 1 - r) * CS + CS / 2];
+    const [x1, y1] = p(winLine[0]), [x2, y2] = p(winLine[winLine.length - 1]);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  }
+  K.drawParts();
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(29,22,64,.55)'; ctx.fillRect(0, 0, W, 96);
+    const msg = !winner ? 'Board’s full. Draw!' : mode === 1 ? (winner === 1 ? 'Four up! You win' : 'CPU got four') : `Player ${winner} wins!`;
+    K.text(msg, W / 2, 30, 30, winner ? COLORS[winner] : C.cream);
+    if (K.t - endAt > .6) {
+      if (K.button(W / 2 - 200, 54, 180, 38, 'Play again', { size: 17 }) || K.hit('Enter', 'Space')) newGame();
+      if (K.button(W / 2 + 20, 54, 180, 38, 'Menu', { bg: C.mint, size: 17 }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

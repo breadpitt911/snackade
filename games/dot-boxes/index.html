@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Dot Boxes</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#fff4e0}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 640, H: 480 }), { ctx, C } = K, W = 640, H = 480;
+const N = 5, SP = 66, X0 = (W - N * SP) / 2, Y0 = 108;
+const PCOL = [C.cobalt, C.tomato], PSOFT = ['rgba(51,70,255,.2)', 'rgba(255,90,54,.22)'];
+let state = 'menu', mode = 1, hE, vE, boxes, turn = 0, score = [0, 0], cur = { i: 1, j: 0 }, thinking = false, endAt = 0, last = null;
+
+function newGame(m) {
+  if (m) mode = m;
+  hE = Array.from({ length: N + 1 }, () => Array(N).fill(-1));
+  vE = Array.from({ length: N }, () => Array(N + 1).fill(-1));
+  boxes = Array.from({ length: N }, () => Array(N).fill(-1));
+  turn = 0; score = [0, 0]; last = null; thinking = false; cur = { i: 0, j: 1 };
+  state = 'play'; K.playing = true;
+}
+// edges as {t:'h'|'v', r, c}
+function sides(b, r, c) { return (b.h[r][c] >= 0) + (b.h[r + 1][c] >= 0) + (b.v[r][c] >= 0) + (b.v[r][c + 1] >= 0); }
+function boxesOf(e) { return e.t === 'h' ? [[e.r - 1, e.c], [e.r, e.c]] : [[e.r, e.c - 1], [e.r, e.c]]; }
+const valid = ([r, c]) => r >= 0 && c >= 0 && r < N && c < N;
+function freeEdges(b) {
+  const out = [];
+  for (let r = 0; r <= N; r++) for (let c = 0; c < N; c++) if (b.h[r][c] < 0) out.push({ t: 'h', r, c });
+  for (let r = 0; r < N; r++) for (let c = 0; c <= N; c++) if (b.v[r][c] < 0) out.push({ t: 'v', r, c });
+  return out;
+}
+function setEdge(b, e, p) { (e.t === 'h' ? b.h : b.v)[e.r][e.c] = p; }
+// returns boxes completed by playing e
+function play(b, e, p) {
+  setEdge(b, e, p); let n = 0;
+  for (const bx of boxesOf(e)) if (valid(bx) && b.box[bx[0]][bx[1]] < 0 && sides(b, bx[0], bx[1]) === 4) { b.box[bx[0]][bx[1]] = p; n++; }
+  return n;
+}
+const live = () => ({ h: hE, v: vE, box: boxes });
+const clone = b => ({ h: b.h.map(r => r.slice()), v: b.v.map(r => r.slice()), box: b.box.map(r => r.slice()) });
+
+function move(e) {
+  if (state !== 'play') return;
+  const b = live();
+  if ((e.t === 'h' ? hE : vE)[e.r][e.c] >= 0) return;
+  const n = play(b, e, turn);
+  last = { ...e, at: K.t };
+  if (n) {
+    score[turn] += n; K.jingle(n > 1 ? [659, 784, 988] : [659, 880], 70, 'square', .04);
+    for (const bx of boxesOf(e)) if (valid(bx) && boxes[bx[0]][bx[1]] === turn) K.burst(X0 + bx[1] * SP + SP / 2, Y0 + bx[0] * SP + SP / 2, 10, [PCOL[turn], C.lemon], 120, .45, 3);
+  } else { K.sfx(440, .05, 'triangle', .04); turn = 1 - turn; }
+  if (score[0] + score[1] === N * N) return finish();
+  if (mode === 1 && turn === 1) cpuTurn();
+}
+function finish() {
+  state = 'over'; endAt = K.t; K.playing = false;
+  if (mode === 1) { const sc = score[0] * 100 + (score[0] > score[1] ? 1000 : 0); K.saveBest('boxes', sc); K.submit(sc); }
+  K.jingle(score[0] >= score[1] || mode === 2 ? [523, 659, 784, 1046] : [392, 330, 262], 110, 'square', .04);
+}
+
+// CPU: take free boxes, otherwise play safe, otherwise give away as little as possible.
+function cpuPick() {
+  const b = live(), free = freeEdges(b);
+  const completes = e => boxesOf(e).filter(valid).some(([r, c]) => sides(b, r, c) === 3);
+  const unsafe = e => boxesOf(e).filter(valid).some(([r, c]) => sides(b, r, c) === 2);
+  const take = free.filter(completes); if (take.length) return K.pick(take);
+  const safe = free.filter(e => !unsafe(e)); if (safe.length) return K.pick(safe);
+  let best = null, bestGive = 1e9;
+  for (const e of free) {
+    const s = clone(b); play(s, e, 1);
+    let given = 0, again = true;
+    while (again) { again = false; for (const f of freeEdges(s)) { const n = play(s, f, 0); if (n) { given += n; again = true; break; } setEdge(s, f, -1); } }
+    if (given < bestGive) { bestGive = given; best = e; }
+  }
+  return best;
+}
+function cpuTurn() { thinking = true; setTimeout(() => { thinking = false; if (state === 'play' && turn === 1) move(cpuPick()); }, 420); }
+
+function edgeNear(x, y) {
+  let best = null, bd = 18;
+  for (const e of freeEdges(live())) {
+    const [mx, my] = e.t === 'h' ? [X0 + e.c * SP + SP / 2, Y0 + e.r * SP] : [X0 + e.c * SP, Y0 + e.r * SP + SP / 2];
+    const d = e.t === 'h' ? (Math.abs(x - mx) < SP / 2 ? Math.abs(y - my) : 99) : (Math.abs(y - my) < SP / 2 ? Math.abs(x - mx) : 99);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+// keyboard cursor lives on a (2N+1)×(2N+1) lattice; edges are the spots where i+j is odd
+const latticeEdge = ({ i, j }) => i % 2 === 0 ? { t: 'h', r: i / 2, c: (j - 1) / 2 } : { t: 'v', r: (i - 1) / 2, c: j / 2 };
+function stepCursor(di, dj) {
+  let { i, j } = cur;
+  i = K.clamp(i + di, 0, 2 * N); j = K.clamp(j + dj, 0, 2 * N);
+  if ((i + j) % 2 === 0) { if (dj) j = K.clamp(j + dj, 0, 2 * N); else i = K.clamp(i + di, 0, 2 * N); }
+  if ((i + j) % 2 === 1) cur = { i, j };
+}
+
+let hover = null;
+function update() {
+  hover = null;
+  if (state !== 'play' || thinking || (mode === 1 && turn === 1)) return;
+  if (K.mouse && !K.touch) hover = edgeNear(K.mouse.x, K.mouse.y);
+  if (K.hit('ArrowRight', 'KeyD')) stepCursor(0, 1); if (K.hit('ArrowLeft', 'KeyA')) stepCursor(0, -1);
+  if (K.hit('ArrowDown', 'KeyS')) stepCursor(1, 0); if (K.hit('ArrowUp', 'KeyW')) stepCursor(-1, 0);
+  if (K.hit('Space', 'Enter')) move(latticeEdge(cur));
+  for (const t of K.taps()) { const e = edgeNear(t.x, t.y); if (e) move(e); }
+}
+
+function line(e, col, w) {
+  const [x1, y1, x2, y2] = e.t === 'h' ? [X0 + e.c * SP, Y0 + e.r * SP, X0 + (e.c + 1) * SP, Y0 + e.r * SP] : [X0 + e.c * SP, Y0 + e.r * SP, X0 + e.c * SP, Y0 + (e.r + 1) * SP];
+  ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+}
+function drawBoard() {
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (boxes[r][c] >= 0) {
+    const p = boxes[r][c], x = X0 + c * SP, y = Y0 + r * SP;
+    ctx.fillStyle = PSOFT[p]; ctx.fillRect(x + 3, y + 3, SP - 6, SP - 6);
+    K.snack(p ? 'berry' : 'cookie', x + SP / 2, y + SP / 2, 16);
+  }
+  for (let r = 0; r <= N; r++) for (let c = 0; c < N; c++) if (hE[r][c] >= 0) line({ t: 'h', r, c }, PCOL[hE[r][c]], 7);
+  for (let r = 0; r < N; r++) for (let c = 0; c <= N; c++) if (vE[r][c] >= 0) line({ t: 'v', r, c }, PCOL[vE[r][c]], 7);
+  if (last && K.t - last.at < .5) line(last, 'rgba(255,201,60,' + (1 - (K.t - last.at) * 2) + ')', 13);
+  const show = hover || (!K.touch && state === 'play' && !(mode === 1 && turn === 1) ? latticeEdge(cur) : null);
+  if (show && (show.t === 'h' ? hE : vE)[show.r][show.c] < 0) line(show, PSOFT[turn].replace(/[\d.]+\)$/, '.6)'), 7);
+  for (let r = 0; r <= N; r++) for (let c = 0; c <= N; c++) K.circle(X0 + c * SP, Y0 + r * SP, 6, C.ink);
+}
+
+function draw() {
+  ctx.fillStyle = '#fff4e0'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(51,70,255,.1)'; ctx.lineWidth = 1; for (let y = 20; y < H; y += 22) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(255,90,54,.3)'; ctx.beginPath(); ctx.moveTo(56, 0); ctx.lineTo(56, H); ctx.stroke();
+  if (state === 'menu') {
+    K.text('Dot Boxes', W / 2, 98, 66, C.ink, 'center', 800, false);
+    K.text('Draw a line. Close a box, it’s yours, go again.', W / 2, 148, 18, '#6a5f86', 'center', 800, false);
+    if (K.button(W / 2 - 220, 196, 200, 60, 'vs CPU', { key: '1' }) || K.hit('Digit1')) newGame(1);
+    if (K.button(W / 2 + 20, 196, 200, 60, '2 Players', { key: '2', bg: C.gum }) || K.hit('Digit2')) newGame(2);
+    K.text(K.touch ? 'Tap between two dots to draw a line' : 'Click between two dots, or arrows + Space', W / 2, 300, 15, C.ink, 'center', 700, false);
+    K.text('Careful: the third side of a box is a gift for whoever goes next.', W / 2, 326, 14, '#6a5f86', 'center', 700, false);
+    for (let i = 0; i < 6; i++) K.circle(W / 2 - 125 + i * 50, 400, 6, C.ink);
+    ctx.strokeStyle = C.cobalt; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(W / 2 - 125, 400); ctx.lineTo(W / 2 - 75, 400); ctx.stroke();
+    ctx.strokeStyle = C.tomato; ctx.beginPath(); ctx.moveTo(W / 2 + 25, 400); ctx.lineTo(W / 2 + 75, 400); ctx.stroke();
+    return;
+  }
+  // scores
+  [0, 1].forEach(p => {
+    const x = p ? W - 24 : 24, on = turn === p && state === 'play';
+    if (on) { ctx.fillStyle = PSOFT[p]; K.rr(p ? W - 214 : 14, 16, 200, 64, 14); ctx.fill(); ctx.strokeStyle = PCOL[p]; ctx.lineWidth = 3; ctx.stroke(); }
+    K.text(mode === 1 ? (p ? 'CPU' : 'You') : `Player ${p + 1}`, p ? x - 10 : x + 10, 36, 16, PCOL[p], p ? 'right' : 'left', 800, false);
+    K.text(String(score[p]), p ? x - 10 : x + 10, 62, 28, C.ink, p ? 'right' : 'left', 800, false);
+  });
+  if (state === 'play') K.text(thinking ? 'CPU is thinking…' : mode === 1 ? (turn ? '' : 'Your move') : `Player ${turn + 1}’s move`, W / 2, 50, 18, PCOL[turn], 'center', 800, false);
+  drawBoard();
+  K.drawParts();
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(255,244,224,.85)'; ctx.fillRect(0, 0, W, H);
+    const tie = score[0] === score[1], w = score[0] > score[1] ? 0 : 1;
+    K.text(tie ? 'It’s a tie!' : mode === 1 ? (w === 0 ? 'You win!' : 'CPU wins') : `Player ${w + 1} wins!`, W / 2, 170, 52, tie ? C.ink : PCOL[w], 'center', 800, false);
+    K.text(`${score[0]} boxes to ${score[1]}`, W / 2, 222, 20, '#6a5f86', 'center', 800, false);
+    if (K.t - endAt > .6) {
+      if (K.button(W / 2 - 210, 270, 190, 56, 'Play again', { key: 'Enter' }) || K.hit('Enter', 'Space')) newGame();
+      if (K.button(W / 2 + 20, 270, 190, 56, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

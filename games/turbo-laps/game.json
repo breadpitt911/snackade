@@ -1,0 +1,17 @@
+{
+  "title": "Turbo Laps",
+  "description": "Top-down racing on three twisty tracks. Three laps, four cars, and grass that will absolutely ruin your time. Drift through the bends, bump the CPU drivers, and race a friend on the same screen.",
+  "instructions": "Player 1: W to accelerate, S to brake, A/D to steer. Player 2: the arrow keys. Solo? Arrows work too. Pick a track with the arrows on the menu (or Q and E). On a phone the gas is automatic: steer with the arrows and tap Brake.",
+  "category": "racing",
+  "tags": [
+    "2-player",
+    "top-down",
+    "cars",
+    "drift"
+  ],
+  "aspect": "16:9",
+  "accent": "#ff5a36",
+  "seed": 96,
+  "featured": false,
+  "order": 9
+}

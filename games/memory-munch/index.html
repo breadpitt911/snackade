@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Memory Munch</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#ffe9c7}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 640, H: 480 }), { ctx, C } = K, W = 640, H = 480;
+const COLS = 5, ROWS = 4, CW = 92, CH = 92, GX = 12, GY = 10, X0 = (W - (COLS * CW + (COLS - 1) * GX)) / 2, Y0 = 66;
+const PCOL = [C.lemon, C.gum];
+let state = 'menu', mode = 1, cards, pick = [], turn = 0, pairs = [0, 0], moves = 0, t0 = 0, elapsed = 0, lock = 0, cursor = 0, endAt = 0, streak = 0;
+
+function newGame(m) {
+  if (m) mode = m;
+  const kinds = [...K.SNACKS].sort(() => Math.random() - .5).slice(0, COLS * ROWS / 2);
+  const deck = kinds.concat(kinds).sort(() => Math.random() - .5);
+  cards = deck.map((kind, i) => ({ kind, i, c: i % COLS, r: Math.floor(i / COLS), up: false, flip: 0, owner: -1, done: false, wob: 0, dealt: K.t + i * .03 }));
+  pick = []; turn = 0; pairs = [0, 0]; moves = 0; t0 = K.t; elapsed = 0; lock = 0; cursor = 0; streak = 0;
+  state = 'play'; K.playing = true;
+}
+const cardAt = (x, y) => cards.find(cd => x > X0 + cd.c * (CW + GX) && x < X0 + cd.c * (CW + GX) + CW && y > Y0 + cd.r * (CH + GY) && y < Y0 + cd.r * (CH + GY) + CH);
+function choose(cd) {
+  if (!cd || cd.up || cd.done || lock > 0 || pick.length >= 2 || state !== 'play') return;
+  cd.up = true; pick.push(cd); K.sfx(600 + pick.length * 120, .05, 'triangle', .04);
+  if (pick.length === 2) {
+    moves++;
+    const [a, b] = pick;
+    if (a.kind === b.kind) {
+      a.done = b.done = true; a.owner = b.owner = turn; pairs[turn]++; streak++; pick = [];
+      K.jingle(streak > 1 ? [659, 784, 1046] : [659, 880], 70, 'square', .04);
+      for (const x of [a, b]) K.burst(X0 + x.c * (CW + GX) + CW / 2, Y0 + x.r * (CH + GY) + CH / 2, 12, [PCOL[turn], C.cream], 150, .5, 3);
+      if (cards.every(x => x.done)) finish();
+    } else {
+      lock = .85; streak = 0; a.wob = b.wob = K.t;
+      K.sfx(200, .12, 'square', .03);
+    }
+  }
+}
+function finish() {
+  state = 'over'; endAt = K.t; K.playing = false;
+  elapsed = K.t - t0;
+  if (mode === 1) { const sc = Math.max(100, Math.round(3000 - moves * 60 - elapsed * 8)); K.saveBest('memory', sc); K.submit(sc); }
+}
+
+function update(dt) {
+  if (state !== 'play') return;
+  elapsed = K.t - t0;
+  for (const cd of cards) cd.flip = K.lerp(cd.flip, cd.up ? 1 : 0, Math.min(1, dt * 14));
+  if (lock > 0) { lock -= dt; if (lock <= 0) { pick.forEach(p => p.up = false); pick = []; if (mode === 2) turn = 1 - turn; } return; }
+  if (K.hit('ArrowRight', 'KeyD')) cursor = (cursor + 1) % cards.length;
+  if (K.hit('ArrowLeft', 'KeyA')) cursor = (cursor + cards.length - 1) % cards.length;
+  if (K.hit('ArrowDown', 'KeyS')) cursor = (cursor + COLS) % cards.length;
+  if (K.hit('ArrowUp', 'KeyW')) cursor = (cursor + cards.length - COLS) % cards.length;
+  if (K.hit('Space', 'Enter')) choose(cards[cursor]);
+  for (const t of K.taps()) { const cd = cardAt(t.x, t.y); if (cd) { cursor = cd.i; choose(cd); } }
+  if (K.mouse && !K.touch) { const cd = cardAt(K.mouse.x, K.mouse.y); if (cd) cursor = cd.i; }
+}
+
+function drawCard(cd, hover) {
+  const x = X0 + cd.c * (CW + GX), y = Y0 + cd.r * (CH + GY);
+  const deal = K.clamp((K.t - cd.dealt) / .25, 0, 1); if (deal <= 0) return;
+  const sx = Math.abs(Math.cos(cd.flip * Math.PI)) * K.back(deal);
+  const face = cd.flip > .5;
+  const wob = cd.wob && K.t - cd.wob < .4 ? Math.sin((K.t - cd.wob) * 40) * 4 * (1 - (K.t - cd.wob) / .4) : 0;
+  const lift = hover && !cd.up ? -3 : 0;
+  ctx.save(); ctx.translate(x + CW / 2 + wob, y + CH / 2 + lift); ctx.scale(Math.max(.02, sx), K.back(deal));
+  ctx.fillStyle = 'rgba(21,19,31,.25)'; K.rr(-CW / 2 + 3, -CH / 2 + 5, CW, CH, 14); ctx.fill();
+  if (face) {
+    ctx.fillStyle = cd.done ? '#fff' : C.cream; K.rr(-CW / 2, -CH / 2, CW, CH, 14); ctx.fill();
+    ctx.strokeStyle = cd.done ? PCOL[cd.owner] : C.ink; ctx.lineWidth = cd.done ? 5 : 3; ctx.stroke();
+    if (cd.done) { ctx.strokeStyle = C.ink; ctx.lineWidth = 2; K.rr(-CW / 2 - 3, -CH / 2 - 3, CW + 6, CH + 6, 16); ctx.stroke(); }
+    K.snack(cd.kind, 0, 0, 26);
+  } else {
+    ctx.fillStyle = hover ? '#ffd864' : C.lemon; K.rr(-CW / 2, -CH / 2, CW, CH, 14); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+    ctx.save(); K.rr(-CW / 2 + 8, -CH / 2 + 8, CW - 16, CH - 16, 9); ctx.clip();
+    ctx.fillStyle = '#ffb81f'; for (let yy = -40; yy < 50; yy += 14) for (let xx = -40 + (yy / 14 % 2) * 7; xx < 50; xx += 14) K.circle(xx, yy, 3, '#ffb81f');
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(21,19,31,.5)'; ctx.lineWidth = 2; K.rr(-CW / 2 + 8, -CH / 2 + 8, CW - 16, CH - 16, 9); ctx.stroke();
+    K.text('?', 0, 2, 36, C.ink, 'center', 800, false);
+  }
+  ctx.restore();
+}
+
+function draw() {
+  ctx.fillStyle = '#ffe9c7'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,93,162,.06)'; for (let i = 0; i < 14; i++) K.circle((i * 151) % W, (i * 83) % H, 22 + (i % 4) * 10, 'rgba(255,93,162,.06)');
+  if (state === 'menu') {
+    K.SNACKS.slice(0, 8).forEach((s, i) => K.snack(s, 70 + i * 72, 400 + Math.sin(K.t * 2 + i) * 6, 20, Math.sin(K.t + i) * .2));
+    K.text('Memory Munch', W / 2, 100, 62, C.ink, 'center', 800, false);
+    K.text('Flip two. Same snack? It’s yours.', W / 2, 150, 18, '#7a5a9a', 'center', 800, false);
+    if (K.button(W / 2 - 220, 196, 200, 60, '1 Player', { key: '1' }) || K.hit('Digit1')) newGame(1);
+    if (K.button(W / 2 + 20, 196, 200, 60, '2 Players', { key: '2', bg: C.gum }) || K.hit('Digit2')) newGame(2);
+    K.text('Two players take turns. Find a pair and you go again.', W / 2, 296, 15, C.ink, 'center', 700, false);
+    K.text(K.touch ? 'Tap cards to flip them' : 'Click cards, or use the arrow keys and Space', W / 2, 322, 14, '#7a5a9a', 'center', 700, false);
+    const b = K.best('memory'); if (b) K.text(`Best ${b.toLocaleString()}`, W / 2, 350, 14, C.ink, 'center', 800, false);
+    return;
+  }
+  // header
+  if (mode === 1) {
+    K.text(`Moves ${moves}`, 22, 32, 20, C.ink, 'left', 800, false);
+    K.text(`Pairs ${pairs[0]}/${cards.length / 2}`, W / 2, 32, 20, C.ink, 'center', 800, false);
+    K.text(`${Math.floor(elapsed)}s`, W - 22, 32, 20, C.ink, 'right', 800, false);
+  } else {
+    [0, 1].forEach(p => {
+      const x = p ? W - 22 : 22, on = turn === p && state === 'play';
+      if (on) { ctx.fillStyle = PCOL[p]; K.rr(p ? W - 190 : 10, 12, 180, 40, 12); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.stroke(); }
+      K.text(`Player ${p + 1}: ${pairs[p]}`, p ? W - 30 : 30, 32, 19, C.ink, p ? 'right' : 'left', 800, false);
+    });
+    if (state === 'play') K.text(streak > 1 ? `On a roll! ×${streak}` : '', W / 2, 32, 16, '#7a5a9a', 'center', 800, false);
+  }
+  cards.forEach((cd, i) => drawCard(cd, i === cursor && state === 'play' && (K.mouse || !K.touch)));
+  if (!K.touch && state === 'play') { const cd = cards[cursor], x = X0 + cd.c * (CW + GX), y = Y0 + cd.r * (CH + GY); ctx.strokeStyle = mode === 2 ? PCOL[turn] : C.cobalt; ctx.lineWidth = 3; ctx.setLineDash([6, 5]); K.rr(x - 6, y - 6, CW + 12, CH + 12, 18); ctx.stroke(); ctx.setLineDash([]); }
+  K.drawParts();
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(255,233,199,.85)'; ctx.fillRect(0, 0, W, H);
+    if (mode === 1) {
+      const sc = Math.max(100, Math.round(3000 - moves * 60 - elapsed * 8));
+      K.text('All munched!', W / 2, 150, 54, C.ink, 'center', 800, false);
+      K.text(`${moves} moves · ${Math.floor(elapsed)} seconds · ${sc.toLocaleString()} points`, W / 2, 204, 18, '#7a5a9a', 'center', 800, false);
+    } else {
+      const w = pairs[0] === pairs[1] ? -1 : pairs[0] > pairs[1] ? 0 : 1;
+      K.text(w < 0 ? 'It’s a tie!' : `Player ${w + 1} wins!`, W / 2, 150, 54, C.ink, 'center', 800, false);
+      K.text(`${pairs[0]} pairs to ${pairs[1]}`, W / 2, 204, 20, '#7a5a9a', 'center', 800, false);
+    }
+    if (K.t - endAt > .6) {
+      if (K.button(W / 2 - 210, 250, 190, 58, 'Play again', { key: 'Enter' }) || K.hit('Enter', 'Space')) newGame();
+      if (K.button(W / 2 + 20, 250, 190, 58, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

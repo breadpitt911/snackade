@@ -1,0 +1,17 @@
+{
+  "title": "Paddle Pals",
+  "description": "Two paddles, one cookie, first to 7. Clip it with the edge of your paddle for a nasty angle, grab a donut to make your paddle huge, or hit a chili and turn the cookie into a fireball. Play the CPU or hand a friend the other side of the keyboard.",
+  "instructions": "Player 1: W and S. Player 2: up and down arrows. Playing solo? Arrows or the mouse work too. On a phone, drag on your half of the screen. P pauses, M mutes.",
+  "category": "sports",
+  "tags": [
+    "2-player",
+    "pong",
+    "classic",
+    "quick"
+  ],
+  "aspect": "16:9",
+  "accent": "#ffc93c",
+  "seed": 41,
+  "featured": false,
+  "order": 4
+}

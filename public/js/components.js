@@ -9,7 +9,7 @@ export function cart(g) {
   const isNew = g.author && Date.now() - g.createdAt < 7 * 864e5;
   const by = g.author ? `by ${esc(g.author.displayName)}` : 'Snackbar original';
   return `<a class="cart" href="/game/${esc(g.slug)}">
-    <div class="label">${coverHtml(g, { small: true })}${isNew ? '<span class="tag new">New</span>' : ''}${g.status === 'hidden' ? '<span class="tag">Hidden</span>' : ''}</div>
+    <div class="label">${coverHtml(g, { small: true })}${isNew ? '<span class="tag new">New</span>' : ''}${g.status === 'hidden' ? '<span class="tag">Hidden</span>' : ''}${g.tags?.includes('2-player') ? '<span class="tag duo" title="Has a 2-player mode">2P</span>' : ''}</div>
     <div class="meta"><h3>${esc(g.title)}</h3>
       <div class="by"><span>${by}</span><span class="stats">${g.rating ? `<i class="sscore" title="Snack Score ${g.rating.avg} from ${g.rating.count} ratings">${bite(true, 14)}${g.rating.avg.toFixed(1)}</i>` : ''}<i title="${g.plays} plays">${icon('plays')}${compact(g.plays)}</i><i title="${g.likes} likes">${icon('heart')}${compact(g.likes)}</i></span></div>
     </div><div class="grip" aria-hidden="true"></div></a>`;

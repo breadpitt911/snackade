@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Turbo Laps</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#2f7a3e}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 800, H: 450 }), { ctx, C } = K, W = 800, H = 450;
+const TW = 34, N = 480, LAPS = 3, CAR_R = 9;
+const TRACKS = [
+  { name: 'Bagel Bend', pts: [[130, 92], [400, 70], [670, 92], [738, 205], [662, 300], [530, 252], [400, 330], [262, 382], [108, 330], [70, 205]] },
+  { name: 'Pretzel Run', pts: [[100, 84], [290, 74], [370, 180], [470, 86], [690, 80], [738, 245], [630, 382], [420, 346], [230, 392], [76, 300]] },
+  { name: 'Noodle Loop', pts: [[96, 96], [250, 62], [418, 124], [566, 64], [720, 120], [712, 262], [566, 236], [482, 382], [300, 326], [160, 392], [62, 262]] },
+];
+let state = 'menu', mode = 1, trackIx = 0, path = [], cars = [], countdown = 0, raceT = 0, finishOrder = [], endAt = 0, resultsAt = 0;
+const trackCv = document.createElement('canvas'); trackCv.width = W; trackCv.height = H; const tc = trackCv.getContext('2d');
+const marks = document.createElement('canvas'); marks.width = W; marks.height = H; const mc = marks.getContext('2d');
+
+// ---------- track ----------
+function buildTrack(ix) {
+  const P = TRACKS[ix].pts, n = P.length; path = [];
+  for (let i = 0; i < N; i++) {
+    const u = i / N * n, k = Math.floor(u), t = u - k;
+    const p0 = P[(k - 1 + n) % n], p1 = P[k % n], p2 = P[(k + 1) % n], p3 = P[(k + 2) % n];
+    const cr = (a, b, c, d) => .5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (-a + 3 * b - 3 * c + d) * t * t * t);
+    path.push({ x: cr(p0[0], p1[0], p2[0], p3[0]), y: cr(p0[1], p1[1], p2[1], p3[1]) });
+  }
+  for (let i = 0; i < N; i++) { const a = path[i], b = path[(i + 1) % N]; a.ang = Math.atan2(b.y - a.y, b.x - a.x); }
+  // paint it once
+  tc.fillStyle = '#3d8b4a'; tc.fillRect(0, 0, W, H);
+  tc.fillStyle = '#44964f'; for (let x = -H; x < W; x += 44) { tc.beginPath(); tc.moveTo(x, 0); tc.lineTo(x + 22, 0); tc.lineTo(x + 22 + H, H); tc.lineTo(x + H, H); tc.fill(); }
+  for (let i = 0; i < 40; i++) { const x = (i * 197) % W, y = (i * 113) % H; if (nearest(x, y, 0, true).d > TW + 30) { tc.fillStyle = '#2f7a3e'; tc.beginPath(); tc.arc(x, y, 12 + (i % 3) * 5, 0, Math.PI * 2); tc.fill(); tc.fillStyle = '#58b062'; tc.beginPath(); tc.arc(x - 3, y - 3, 6 + (i % 3) * 3, 0, Math.PI * 2); tc.fill(); } }
+  const loop = (ctx2) => { ctx2.beginPath(); path.forEach((p, i) => i ? ctx2.lineTo(p.x, p.y) : ctx2.moveTo(p.x, p.y)); ctx2.closePath(); };
+  tc.lineJoin = 'round';
+  loop(tc); tc.strokeStyle = '#15131f'; tc.lineWidth = TW * 2 + 16; tc.stroke();
+  loop(tc); tc.strokeStyle = '#fff4e0'; tc.lineWidth = TW * 2 + 10; tc.stroke();
+  loop(tc); tc.strokeStyle = '#e8263f'; tc.setLineDash([14, 14]); tc.stroke(); tc.setLineDash([]);
+  loop(tc); tc.strokeStyle = '#4a4658'; tc.lineWidth = TW * 2; tc.stroke();
+  loop(tc); tc.strokeStyle = 'rgba(255,255,255,.035)'; tc.lineWidth = TW * 1.2; tc.stroke();
+  loop(tc); tc.strokeStyle = 'rgba(255,244,224,.35)'; tc.lineWidth = 2; tc.setLineDash([16, 18]); tc.stroke(); tc.setLineDash([]);
+  // start / finish
+  const s = path[0], nx = -Math.sin(s.ang), ny = Math.cos(s.ang);
+  for (let k = -4; k < 4; k++) for (let j = 0; j < 2; j++) {
+    tc.fillStyle = (k + j) % 2 ? '#fff' : '#15131f';
+    const cx = s.x + nx * (k + .5) * (TW / 4) + Math.cos(s.ang) * (j - 1) * 6, cy = s.y + ny * (k + .5) * (TW / 4) + Math.sin(s.ang) * (j - 1) * 6;
+    tc.save(); tc.translate(cx, cy); tc.rotate(s.ang); tc.fillRect(-3, -TW / 8, 6, TW / 4); tc.restore();
+  }
+  mc.clearRect(0, 0, W, H);
+}
+function nearest(x, y, hint, full) {
+  let best = 0, bd = Infinity;
+  if (full || hint == null) { for (let i = 0; i < N; i++) { const d = (path[i].x - x) ** 2 + (path[i].y - y) ** 2; if (d < bd) { bd = d; best = i; } } }
+  else for (let k = -40; k <= 40; k++) { const i = (hint + k + N) % N, d = (path[i].x - x) ** 2 + (path[i].y - y) ** 2; if (d < bd) { bd = d; best = i; } }
+  return { i: best, d: Math.sqrt(bd) };
+}
+
+// ---------- race ----------
+function newRace(m) {
+  if (m) mode = m;
+  buildTrack(trackIx);
+  const humans = mode === 2 ? 2 : 1;
+  const spec = [
+    { name: mode === 1 ? 'You' : 'P1', color: C.lemon, human: 1 },
+    { name: mode === 2 ? 'P2' : 'Chip', color: mode === 2 ? C.mint : C.tomato, human: mode === 2 ? 2 : 0 },
+    { name: 'Nacho', color: C.grape, human: 0 },
+    { name: 'Pickle', color: '#4fc3f7', human: 0 },
+  ];
+  cars = spec.map((s, k) => {
+    const back = 10 + Math.floor(k / 2) * 13, idx = (N - back) % N, p = path[idx], side = k % 2 ? 1 : -1;
+    const nx = -Math.sin(p.ang), ny = Math.cos(p.ang);
+    return { ...s, x: p.x + nx * side * 14, y: p.y + ny * side * 14, a: p.ang, vx: 0, vy: 0, idx, lap: 0, half: false, done: false, time: 0, lapStart: 0, bestLap: 0,
+      skill: s.human ? 1 : [0, .96, .93, .9][k] + K.rnd(-.02, .02), line: K.rnd(-10, 10), steer: 0 };
+  });
+  countdown = 3.4; raceT = 0; finishOrder = []; resultsAt = 0;
+  state = 'race'; K.playing = true;
+}
+function controls(car) {
+  if (car.human === 1) {
+    const solo = mode === 1;
+    if (K.touch && solo) {
+      const left = K.held({ x: 0, y: H - 150, w: 130, h: 150 }), right = K.held({ x: 130, y: H - 150, w: 130, h: 150 }), brake = K.held({ x: W - 150, y: H - 150, w: 150, h: 150 });
+      return { gas: brake ? -1 : 1, steer: (right ? 1 : 0) - (left ? 1 : 0) };
+    }
+    return { gas: (K.key('KeyW') || (solo && K.key('ArrowUp')) ? 1 : 0) - (K.key('KeyS') || (solo && K.key('ArrowDown')) ? 1 : 0), steer: (K.key('KeyD') || (solo && K.key('ArrowRight')) ? 1 : 0) - (K.key('KeyA') || (solo && K.key('ArrowLeft')) ? 1 : 0) };
+  }
+  if (car.human === 2) return { gas: (K.key('ArrowUp') ? 1 : 0) - (K.key('ArrowDown') ? 1 : 0), steer: (K.key('ArrowRight') ? 1 : 0) - (K.key('ArrowLeft') ? 1 : 0) };
+  // CPU driver: aim at a point down the track, ease off before tight corners
+  const sp = Math.hypot(car.vx, car.vy);
+  const look = (car.idx + 10 + Math.floor(sp / 14)) % N, tp = path[look];
+  const nx = -Math.sin(tp.ang), ny = Math.cos(tp.ang);
+  const want = Math.atan2(tp.y + ny * car.line - car.y, tp.x + nx * car.line - car.x);
+  const steer = K.clamp(K.angDiff(car.a, want) * 2.6, -1, 1);
+  const bend = Math.abs(K.angDiff(path[car.idx].ang, path[(car.idx + 34) % N].ang));
+  const lead = progress(car) - Math.max(...cars.filter(c => c.human).map(progress));
+  let target = 255 * car.skill * (1 - Math.min(.45, bend * .42)) * (lead > N * .25 ? .9 : lead < -N * .25 ? 1.08 : 1);
+  return { gas: sp < target ? 1 : sp > target + 25 ? -.6 : 0, steer };
+}
+const progress = c => c.done ? 1e9 - c.time : c.lap * N + c.idx;
+
+function physics(car, dt, inp) {
+  const sp = Math.hypot(car.vx, car.vy), fx = Math.cos(car.a), fy = Math.sin(car.a);
+  const fwd = car.vx * fx + car.vy * fy;
+  car.steer = K.lerp(car.steer, inp.steer, Math.min(1, dt * 10));
+  car.a += car.steer * 2.9 * Math.min(1, sp / 110) * Math.sign(fwd || 1) * dt;
+  const n = nearest(car.x, car.y, car.idx), off = n.d > TW;
+  if (inp.gas > 0) { car.vx += fx * 270 * inp.gas * dt; car.vy += fy * 270 * inp.gas * dt; }
+  else if (inp.gas < 0) { const k = fwd > 10 ? 420 : 150; car.vx += fx * -k * dt; car.vy += fy * -k * dt; }
+  // split into forward + sideways, and let the tyres bite on the sideways part
+  let f = car.vx * fx + car.vy * fy, l = car.vx * -fy + car.vy * fx;
+  const grip = off ? 3.5 : 7.5;
+  l *= Math.exp(-grip * dt); f *= Math.exp(-(off ? 2.6 : .45) * dt);
+  const max = off ? 115 : 262; if (f > max) f = K.lerp(f, max, Math.min(1, dt * 6)); if (f < -80) f = -80;
+  car.vx = fx * f - fy * l; car.vy = fy * f + fx * l;
+  car.x = K.clamp(car.x + car.vx * dt, 8, W - 8); car.y = K.clamp(car.y + car.vy * dt, 8, H - 8);
+  if (Math.abs(l) > 70 && !off) { mc.fillStyle = 'rgba(21,19,31,.16)'; for (const s of [-1, 1]) mc.fillRect(car.x - fx * 8 + -fy * s * 5 - 1.5, car.y - fy * 8 + fx * s * 5 - 1.5, 3, 3); }
+  if (off && sp > 60 && Math.random() < .3) K.burst(car.x - fx * 10, car.y - fy * 10, 1, ['#6b4a2b', '#8a6a3a'], 40, .4, 2.5);
+  // laps
+  const prev = car.idx; car.idx = n.i;
+  if (car.idx > N * .4 && car.idx < N * .6) car.half = true;
+  if (prev > N * .85 && car.idx < N * .15 && car.half) lapDone(car);
+}
+function lapDone(car) {
+  car.half = false; car.lap++;
+  const lt = raceT - car.lapStart; car.lapStart = raceT; if (!car.bestLap || lt < car.bestLap) car.bestLap = lt;
+  if (car.human) K.sfx(car.lap >= LAPS ? 880 : 660, .15, 'square', .04);
+  if (car.lap >= LAPS && !car.done) {
+    car.done = true; car.time = raceT; finishOrder.push(car);
+    if (car.human) K.jingle(finishOrder.length === 1 ? [523, 659, 784, 1046] : [523, 659, 784], 90, 'square', .04);
+  }
+}
+
+function update(dt) {
+  if (state !== 'race') return;
+  if (countdown > 0) {
+    const before = Math.ceil(countdown); countdown -= dt;
+    if (Math.ceil(countdown) !== before && countdown > 0) K.sfx(440, .15, 'square', .05);
+    if (countdown <= 0) K.sfx(880, .3, 'square', .06);
+    return;
+  }
+  raceT += dt;
+  for (const c of cars) physics(c, dt, c.done && !c.human ? { gas: 0, steer: 0 } : c.done ? { gas: -.3, steer: 0 } : controls(c));
+  // bumps
+  for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) {
+    const a = cars[i], b = cars[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+    if (d < CAR_R * 2 && d > 0) {
+      const nx = dx / d, ny = dy / d, p = (CAR_R * 2 - d) / 2; a.x -= nx * p; a.y -= ny * p; b.x += nx * p; b.y += ny * p;
+      const rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+      if (rel < 0) { const j2 = -rel * .75; a.vx -= nx * j2; a.vy -= ny * j2; b.vx += nx * j2; b.vy += ny * j2; if (-rel > 60) K.sfx(160, .05, 'square', .03); }
+    }
+  }
+  const humans = cars.filter(c => c.human);
+  if (!resultsAt && humans.every(c => c.done)) resultsAt = K.t + 1.8;
+  if (raceT > 300 && !resultsAt) resultsAt = K.t;   // nobody finishes in five minutes? call it
+  if (resultsAt && K.t > resultsAt) finish();
+}
+function finish() {
+  state = 'results'; K.playing = false; endAt = K.t;
+  const rest = cars.filter(c => !c.done).sort((a, b) => progress(b) - progress(a));
+  finishOrder = finishOrder.concat(rest);
+  if (mode === 1) {
+    const me = cars[0], place = finishOrder.indexOf(me);
+    const sc = me.done ? [1500, 900, 500, 200][place] + Math.max(0, Math.round((150 - me.time) * 20)) : 0;
+    K.saveBest('laps-' + trackIx, sc); K.submit(sc);
+  }
+}
+
+// ---------- drawing ----------
+function drawCar(c) {
+  ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.a);
+  ctx.fillStyle = 'rgba(0,0,0,.3)'; K.rr(-11, -5, 24, 14, 4); ctx.fill();
+  ctx.fillStyle = C.ink; for (const [x, y] of [[-8, -8], [5, -8], [-8, 5], [5, 5]]) ctx.fillRect(x, y, 6, 3);
+  ctx.fillStyle = c.color; K.rr(-12, -6.5, 24, 13, 4); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#bfe8ff'; K.rr(1, -4.5, 5, 9, 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.fillRect(-9, -2, 8, 1.6);
+  ctx.restore();
+}
+function ordinal(n) { return n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : n % 10] || 'th'); }
+const fmtT = s => `${Math.floor(s / 60)}:${(s % 60).toFixed(2).padStart(5, '0')}`;
+
+function draw() {
+  if (state === 'menu') {
+    if (!path.length || menuTrack !== trackIx) { buildTrack(trackIx); menuTrack = trackIx; }
+    ctx.drawImage(trackCv, 0, 0);
+    const k = Math.floor(K.t * 60) % N, k2 = (k + N / 2) % N;
+    drawCar({ x: path[k].x, y: path[k].y, a: path[k].ang, color: C.lemon }); drawCar({ x: path[k2].x, y: path[k2].y, a: path[k2].ang, color: C.mint });
+    ctx.fillStyle = 'rgba(21,19,31,.55)'; ctx.fillRect(0, 0, W, H);
+    K.text('Turbo Laps', W / 2, 88, 72, C.cream);
+    K.text('Three laps. Four cars. Don’t cut through the grass.', W / 2, 140, 18, C.lemon, 'center', 700);
+    if (K.button(W / 2 - 220, 172, 200, 60, '1 Player', { key: '1' }) || K.hit('Digit1')) newRace(1);
+    if (K.button(W / 2 + 20, 172, 200, 60, '2 Players', { key: '2', bg: C.mint }) || K.hit('Digit2')) newRace(2);
+    if (K.button(W / 2 - 160, 252, 46, 40, '◀', { size: 18, bg: C.cream }) || K.hit('KeyQ')) trackIx = (trackIx + TRACKS.length - 1) % TRACKS.length;
+    if (K.button(W / 2 + 114, 252, 46, 40, '▶', { size: 18, bg: C.cream }) || K.hit('KeyE')) trackIx = (trackIx + 1) % TRACKS.length;
+    K.text(TRACKS[trackIx].name, W / 2, 273, 22, C.cream);
+    const b = K.best('laps-' + trackIx); if (b) K.text(`Best ${b.toLocaleString()}`, W / 2, 304, 13, C.lemon, 'center', 700, false);
+    if (!K.touch) {
+      K.text('Player 1', W / 2 - 150, 336, 15, C.lemon); ['W', 'A', 'S', 'D'].forEach((k, i) => K.keycap(W / 2 - 201 + i * 34, 368, k));
+      K.text('Player 2', W / 2 + 150, 336, 15, C.mint); ['↑', '←', '↓', '→'].forEach((k, i) => K.keycap(W / 2 + 99 + i * 34, 368, k));
+      K.text('Up = gas, down = brake. Solo racers can use arrows too.', W / 2, 410, 14, 'rgba(255,244,224,.75)', 'center', 600, false);
+    } else K.text('Gas is automatic. Thumbs on the arrows, tap brake for corners.', W / 2, 360, 15, C.cream, 'center', 700);
+    return;
+  }
+  ctx.drawImage(trackCv, 0, 0); ctx.drawImage(marks, 0, 0);
+  K.drawParts();
+  [...cars].sort((a, b) => a.y - b.y).forEach(drawCar);
+  // labels over humans
+  for (const c of cars) if (c.human && state === 'race') { ctx.fillStyle = c.color; ctx.beginPath(); ctx.moveTo(c.x, c.y - 14); ctx.lineTo(c.x - 5, c.y - 21); ctx.lineTo(c.x + 5, c.y - 21); ctx.fill(); }
+  // HUD
+  const order = [...cars].sort((a, b) => progress(b) - progress(a));
+  cars.filter(c => c.human).forEach((c, k) => {
+    const x = k ? W - 14 : 14, al = k ? 'right' : 'left';
+    ctx.fillStyle = 'rgba(21,19,31,.75)'; K.rr(k ? W - 170 : 6, 6, 164, 54, 10); ctx.fill();
+    K.text(c.done ? 'Finished!' : `Lap ${Math.min(LAPS, c.lap + 1)}/${LAPS}`, x, 22, 17, c.color, al, 800, false);
+    K.text(`${ordinal(order.indexOf(c) + 1)} · ${fmtT(c.done ? c.time : raceT)}`, x, 44, 15, C.cream, al, 700, false);
+  });
+  if (K.touch && mode === 1 && state === 'race') {
+    ctx.globalAlpha = .55;
+    K.button(14, H - 80, 100, 66, '◀', { bg: C.cream, size: 30 }); K.button(130, H - 80, 100, 66, '▶', { bg: C.cream, size: 30 }); K.button(W - 124, H - 80, 110, 66, 'Brake', { bg: C.tomato, size: 20 });
+    ctx.globalAlpha = 1;
+  }
+  if (state === 'race' && countdown > 0) {
+    const n = Math.ceil(countdown);
+    K.text(n > 3 ? 'Ready' : String(n), W / 2, H / 2 - 10, 90, n === 1 ? C.lemon : C.cream);
+  } else if (state === 'race' && raceT < .8) K.text('GO!', W / 2, H / 2 - 10, 90, C.mint);
+  if (state === 'results') {
+    ctx.fillStyle = 'rgba(21,19,31,.8)'; ctx.fillRect(0, 0, W, H);
+    const me = cars[0];
+    const head = mode === 1 ? (finishOrder[0] === me ? 'You won!' : `You came ${ordinal(finishOrder.indexOf(me) + 1)}`) : `${finishOrder.find(c => c.human).name} wins!`;
+    K.text(head, W / 2, 70, 50, finishOrder[0].human ? finishOrder[0].color : C.cream);
+    finishOrder.forEach((c, i) => {
+      const y = 130 + i * 38;
+      K.text(ordinal(i + 1), W / 2 - 170, y, 20, i === 0 ? C.lemon : C.cream, 'left');
+      K.circle(W / 2 - 100, y, 8, c.color, C.ink, 2);
+      K.text(c.name, W / 2 - 80, y, 20, C.cream, 'left', 700);
+      K.text(c.done ? fmtT(c.time) : 'DNF', W / 2 + 170, y, 18, C.cream, 'right', 700);
+    });
+    if (K.t - endAt > .6) {
+      if (K.button(W / 2 - 210, 300, 190, 56, 'Race again', { key: 'Enter' }) || K.hit('Enter', 'Space')) newRace();
+      if (K.button(W / 2 + 20, 300, 190, 56, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+let menuTrack = -1;
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

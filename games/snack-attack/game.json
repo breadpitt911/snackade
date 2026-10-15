@@ -1,0 +1,17 @@
+{
+  "title": "Snack Attack",
+  "description": "The gummy bears have turned on you. Run around the kitchen while your spoon blaster aims and fires on its own. Big jellies split when they pop, spitters keep their distance and lob seeds. Grab snacks to power up. In co-op, stand next to a downed friend to get them back up.",
+  "instructions": "Player 1: WASD. Player 2: arrow keys. Solo? Either set works. Aiming and shooting are automatic. On a phone, drag to move. Co-op scores don't go on the leaderboard.",
+  "category": "action",
+  "tags": [
+    "2-player",
+    "co-op",
+    "arena",
+    "survival"
+  ],
+  "aspect": "16:9",
+  "accent": "#ff5a36",
+  "seed": 127,
+  "featured": false,
+  "order": 20
+}

@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Sky Swarm</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#0d0b22}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 480, H: 640 }), { ctx, C } = K, W = 480, H = 640;
+let state = 'menu', mode = 1, ships, shots, foes, bullets, drops, wave, spawnQ, waveIn, score, endAt = 0, banner = '', bannerT = 0;
+const stars = Array.from({ length: 90 }, (_, i) => ({ x: Math.random() * W, y: Math.random() * H, z: 1 + (i % 3) }));
+
+function mkShip(i, color) { return { i, color, x: W / 2 + (mode === 2 ? (i ? 60 : -60) : 0), y: H - 80, lives: 3, inv: 2, gun: 1, cd: 0, shield: 0, alive: true, tilt: 0, dragX: null }; }
+function newGame(m) {
+  mode = m; ships = [mkShip(0, C.lemon)]; if (m === 2) ships.push(mkShip(1, C.mint));
+  shots = []; foes = []; bullets = []; drops = []; wave = 0; score = 0; spawnQ = []; waveIn = .8;
+  state = 'play'; K.playing = true; K.clearParts();
+}
+function nextWave() {
+  wave++; spawnQ = [];
+  const boss = wave % 5 === 0;
+  banner = boss ? 'Big one incoming!' : `Wave ${wave}`; bannerT = 1.8;
+  if (boss) { spawnQ.push({ at: 1.2, make: () => ({ type: 'boss', x: W / 2, y: -80, ty: 120, r: 46, hp: 70 + wave * 10, max: 70 + wave * 10, t: 0, cd: 1.5 }) }); return; }
+  const n = 6 + wave * 2;
+  for (let k = 0; k < n; k++) {
+    const left = (k / 4 | 0) % 2 === 0;
+    spawnQ.push({ at: .6 + k * .32, make: () => ({ type: 'bug', x: left ? 70 : W - 70, y: -20, r: 15, hp: 1 + (wave > 6 ? 1 : 0), t: 0, side: left ? 1 : -1, amp: K.rnd(110, 170), sp: 120 + wave * 6 }) });
+  }
+  for (let k = 0; k < Math.floor(wave / 2) + (wave > 1 ? 1 : 0); k++) spawnQ.push({ at: 2 + k * 1.4, make: () => ({ type: 'shooter', x: K.rnd(60, W - 60), y: -30, ty: K.rnd(80, 220), r: 18, hp: 3 + Math.floor(wave / 3), t: 0, cd: K.rnd(1, 2), dir: Math.random() < .5 ? -1 : 1 }) });
+  for (let k = 0; k < Math.floor(wave / 3); k++) spawnQ.push({ at: 3 + k * 1.7, make: () => ({ type: 'diver', x: K.rnd(50, W - 50), y: -30, ty: K.rnd(70, 160), r: 14, hp: 2, t: 0, phase: 0 }) });
+  spawnQ.sort((a, b) => a.at - b.at);
+}
+const live = () => ships.filter(s => s.alive);
+function nearestShip(x, y) { let b = null, bd = 1e9; for (const s of live()) { const d = Math.hypot(s.x - x, s.y - y); if (d < bd) { bd = d; b = s; } } return b; }
+
+function fire(s) {
+  const pat = [[0], [-7, 7], [-10, 0, 10], [-12, -4, 4, 12]][Math.min(3, s.gun - 1)];
+  pat.forEach((dx, k) => shots.push({ x: s.x + dx, y: s.y - 18, vx: s.gun >= 3 ? dx * 9 : 0, vy: -620, owner: s.i }));
+  s.cd = .13; K.sfx(900 + s.i * 120, .04, 'square', .018, -400);
+}
+function enemyShot(x, y, ang, sp) { bullets.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: 5 }); }
+function hurt(s) {
+  if (s.inv > 0) return;
+  if (s.shield > 0) { s.shield = 0; s.inv = 1; K.sfx(300, .2, 'triangle', .05, 300); return; }
+  s.lives--; s.inv = 2.2; s.gun = Math.max(1, s.gun - 1);
+  K.shake(.6); K.noise(.5, .12, 900); K.burst(s.x, s.y, 30, [s.color, C.cream, C.tomato], 260, .8, 4);
+  if (s.lives <= 0) { s.alive = false; if (!live().length) gameOver(); }
+}
+function kill(f) {
+  f.dead = true;
+  const pts = { bug: 100, shooter: 250, diver: 200, boss: 2000 + wave * 200 }[f.type]; score += pts;
+  K.burst(f.x, f.y, f.type === 'boss' ? 80 : 18, f.type === 'boss' ? [C.tomato, C.lemon, C.gum, C.cream] : [C.gum, C.lemon, C.cream], f.type === 'boss' ? 380 : 200, f.type === 'boss' ? 1.4 : .6, f.type === 'boss' ? 5 : 3);
+  K.noise(f.type === 'boss' ? 1 : .2, f.type === 'boss' ? .16 : .06, 1500); if (f.type === 'boss') K.shake(1);
+  const chance = { bug: .07, shooter: .3, diver: .15, boss: 1 }[f.type];
+  const n = f.type === 'boss' ? 3 : Math.random() < chance ? 1 : 0;
+  for (let k = 0; k < n; k++) drops.push({ x: f.x + (k - 1) * 30, y: f.y, type: K.pick(['chili', 'chili', 'donut', 'cherry']), t: 0 });
+}
+function gameOver() {
+  state = 'over'; endAt = K.t; K.playing = false;
+  if (mode === 1) { K.saveBest('swarm', score); K.submit(score); } else K.saveBest('swarm2', score);
+}
+
+function update(dt) {
+  for (const s of stars) { s.y += s.z * 30 * dt * (state === 'play' ? 1.6 : 1); if (s.y > H) { s.y = 0; s.x = Math.random() * W; } }
+  bannerT -= dt;
+  if (state !== 'play') return;
+  // input
+  const ctl = [
+    mode === 1 ? { l: ['KeyA', 'ArrowLeft'], r: ['KeyD', 'ArrowRight'], u: ['KeyW', 'ArrowUp'], d: ['KeyS', 'ArrowDown'] } : { l: ['KeyA'], r: ['KeyD'], u: ['KeyW'], d: ['KeyS'] },
+    { l: ['ArrowLeft'], r: ['ArrowRight'], u: ['ArrowUp'], d: ['ArrowDown'] },
+  ];
+  for (const s of ships) {
+    if (!s.alive) continue;
+    const c = ctl[s.i];
+    const ix = (K.key(...c.r) ? 1 : 0) - (K.key(...c.l) ? 1 : 0), iy = (K.key(...c.d) ? 1 : 0) - (K.key(...c.u) ? 1 : 0);
+    s.x += ix * 310 * dt; s.y += iy * 310 * dt; s.tilt = K.lerp(s.tilt, ix * .35, dt * 10);
+    if (s.i === 0 && mode === 1) {
+      const p = K.pointers()[0];
+      if (p) { if (s.dragX === null) { s.dragX = s.x - p.x; s.dragY = s.y - p.y; } const tx = p.x + s.dragX, ty = p.y + s.dragY; s.tilt = K.lerp(s.tilt, K.clamp((tx - s.x) / 30, -.4, .4), dt * 10); s.x = tx; s.y = ty; }
+      else s.dragX = null;
+    }
+    s.x = K.clamp(s.x, 20, W - 20); s.y = K.clamp(s.y, 60, H - 30);
+    s.cd -= dt; s.inv -= dt; s.shield -= dt;
+    if (s.cd <= 0) fire(s);
+  }
+  // spawning
+  if (!spawnQ.length && !foes.length) { waveIn -= dt; if (waveIn <= 0) { nextWave(); waveIn = 1.6; waveClock = 0; } }
+  waveClock += dt;
+  while (spawnQ.length && spawnQ[0].at <= waveClock) foes.push(spawnQ.shift().make());
+  // enemies
+  for (const f of foes) {
+    f.t += dt;
+    const tgt = nearestShip(f.x, f.y);
+    if (f.type === 'bug') { f.y += f.sp * dt; f.x = (f.side > 0 ? 70 : W - 70) + f.side * Math.sin(f.t * 1.6) * f.amp + f.side * f.amp * .6; if (f.y > H + 30) f.dead = true, f.escaped = true; }
+    if (f.type === 'shooter') {
+      f.y = K.lerp(f.y, f.ty, dt * 2); f.x += f.dir * 60 * dt; if (f.x < 40 || f.x > W - 40) f.dir *= -1;
+      f.cd -= dt; if (f.cd <= 0 && tgt && f.y > 40) { const a = Math.atan2(tgt.y - f.y, tgt.x - f.x); enemyShot(f.x, f.y + 10, a, 190 + wave * 6); if (wave > 4) { enemyShot(f.x, f.y + 10, a - .25, 180); enemyShot(f.x, f.y + 10, a + .25, 180); } f.cd = Math.max(.9, 2 - wave * .07); }
+    }
+    if (f.type === 'diver') {
+      if (f.phase === 0) { f.y = K.lerp(f.y, f.ty, dt * 2.5); if (f.t > 1.2 && tgt) { f.phase = 1; const a = Math.atan2(tgt.y - f.y, tgt.x - f.x); f.vx = Math.cos(a) * 330; f.vy = Math.sin(a) * 330; K.sfx(600, .3, 'sawtooth', .03, -400); } }
+      else { f.x += f.vx * dt; f.y += f.vy * dt; if (f.y > H + 30 || f.x < -30 || f.x > W + 30) f.dead = true; }
+    }
+    if (f.type === 'boss') {
+      f.y = K.lerp(f.y, f.ty, dt * 1.2); f.x = W / 2 + Math.sin(f.t * .7) * 150;
+      f.cd -= dt;
+      if (f.cd <= 0 && f.y > 60) {
+        const phase = Math.floor(f.t / 5) % 3;
+        if (phase === 0) { for (let k = 0; k < 14; k++) enemyShot(f.x, f.y, k / 14 * Math.PI * 2 + f.t, 150); f.cd = 1.1; }
+        else if (phase === 1 && tgt) { const a = Math.atan2(tgt.y - f.y, tgt.x - f.x); for (let k = -2; k <= 2; k++) enemyShot(f.x, f.y + 30, a + k * .16, 230); f.cd = .8; }
+        else { enemyShot(f.x - 34, f.y + 20, Math.PI / 2 + Math.sin(f.t * 3) * .5, 210); enemyShot(f.x + 34, f.y + 20, Math.PI / 2 - Math.sin(f.t * 3) * .5, 210); f.cd = .16; }
+        K.sfx(240, .05, 'square', .015);
+      }
+    }
+    for (const s of live()) if (Math.hypot(s.x - f.x, s.y - f.y) < f.r + 12) { hurt(s); if (f.type !== 'boss') { f.hp = 0; kill(f); } }
+  }
+  // player shots
+  for (const b of shots) {
+    b.x += b.vx * dt; b.y += b.vy * dt; if (b.y < -20) b.dead = true;
+    for (const f of foes) if (!f.dead && !b.dead && Math.hypot(b.x - f.x, b.y - f.y) < f.r + 4) {
+      b.dead = true; f.hp--; f.flash = .06; K.burst(b.x, b.y, 3, [C.cream], 80, .2, 2);
+      if (f.hp <= 0) kill(f);
+    }
+  }
+  for (const f of foes) f.flash = Math.max(0, (f.flash || 0) - dt);
+  for (const b of bullets) { b.x += b.vx * dt; b.y += b.vy * dt; if (b.y > H + 10 || b.y < -10 || b.x < -10 || b.x > W + 10) b.dead = true; for (const s of live()) if (!b.dead && Math.hypot(s.x - b.x, s.y - b.y) < b.r + 7) { b.dead = true; hurt(s); } }
+  for (const d of drops) {
+    d.t += dt; d.y += 90 * dt; if (d.y > H + 20) d.dead = true;
+    for (const s of live()) if (!d.dead && Math.hypot(s.x - d.x, s.y - d.y) < 26) {
+      d.dead = true; K.jingle([660, 880, 1100], 50, 'triangle', .04);
+      if (d.type === 'chili') { s.gun = Math.min(4, s.gun + 1); score += 50; }
+      if (d.type === 'donut') s.shield = 12;
+      if (d.type === 'cherry') { if (s.lives < 5) s.lives++; else score += 500; }
+    }
+  }
+  shots = shots.filter(b => !b.dead); bullets = bullets.filter(b => !b.dead); foes = foes.filter(f => !f.dead); drops = drops.filter(d => !d.dead);
+}
+let waveClock = 0;
+
+// ---------- drawing ----------
+function drawShip(s) {
+  if (!s.alive || (s.inv > 0 && Math.floor(K.t * 14) % 2)) return;
+  ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.tilt);
+  const fl = 8 + Math.random() * 6;
+  ctx.fillStyle = C.tomato; ctx.beginPath(); ctx.moveTo(-6, 14); ctx.lineTo(0, 14 + fl); ctx.lineTo(6, 14); ctx.fill();
+  ctx.fillStyle = C.lemon; ctx.beginPath(); ctx.moveTo(-3, 14); ctx.lineTo(0, 10 + fl * .6); ctx.lineTo(3, 14); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(0, -20); ctx.quadraticCurveTo(9, -6, 18, 10); ctx.lineTo(10, 15); ctx.lineTo(-10, 15); ctx.lineTo(-18, 10); ctx.quadraticCurveTo(-9, -6, 0, -20); ctx.closePath();
+  ctx.fillStyle = s.color; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(0, -2, 5, 8, 0, 0, Math.PI * 2); ctx.fillStyle = '#bfe8ff'; ctx.fill(); ctx.stroke();
+  ctx.restore();
+  if (s.shield > 0) K.circle(s.x, s.y, 26 + Math.sin(K.t * 8) * 2, null, 'rgba(255,126,182,.8)', 3);
+}
+function drawFoe(f) {
+  ctx.save(); ctx.translate(f.x, f.y);
+  const flash = f.flash > 0;
+  if (f.type === 'bug') {
+    const flap = Math.sin(K.t * 20 + f.x) * 4;
+    ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.beginPath(); ctx.ellipse(-12, -6 - flap, 10, 5, -.5, 0, Math.PI * 2); ctx.ellipse(12, -6 - flap, 10, 5, .5, 0, Math.PI * 2); ctx.fill();
+    K.circle(0, 0, 14, flash ? '#fff' : C.gum, C.ink, 2.5);
+    K.circle(-5, 2, 4, '#fff', C.ink, 1.5); K.circle(5, 2, 4, '#fff', C.ink, 1.5); K.circle(-5, 3, 1.8, C.ink); K.circle(5, 3, 1.8, C.ink);
+  } else if (f.type === 'shooter') {
+    ctx.beginPath(); ctx.ellipse(0, 4, 22, 9, 0, 0, Math.PI * 2); ctx.fillStyle = flash ? '#fff' : C.grape; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 11, Math.PI, 0); ctx.fillStyle = '#bfe8ff'; ctx.fill(); ctx.stroke();
+    K.circle(0, -4, 3.5, C.ink);
+    for (const x of [-12, 0, 12]) K.circle(x, 7, 2, Math.floor(K.t * 6) % 3 === (x + 12) / 12 ? C.lemon : '#5a4a9a');
+  } else if (f.type === 'diver') {
+    ctx.rotate(f.phase ? Math.atan2(f.vy, f.vx) - Math.PI / 2 : 0);
+    ctx.beginPath(); ctx.moveTo(0, 18); ctx.lineTo(-14, -12); ctx.lineTo(14, -12); ctx.closePath(); ctx.fillStyle = flash ? '#fff' : C.tomato; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.stroke();
+    K.circle(0, -3, 5.5, '#fff', C.ink, 1.5); K.circle(0, -2, 2.5, C.ink);
+  } else if (f.type === 'boss') {
+    ctx.beginPath(); ctx.ellipse(0, 10, 70, 24, 0, 0, Math.PI * 2); ctx.fillStyle = flash ? '#fff' : '#d99a55'; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(0, 6, 64, 18, 0, Math.PI, 0); ctx.fillStyle = '#ff7eb6'; ctx.fill();
+    ctx.beginPath(); ctx.arc(0, -4, 30, Math.PI, 0); ctx.fillStyle = '#bfe8ff'; ctx.fill(); ctx.stroke();
+    K.circle(-10, -12, 7, '#fff', C.ink, 2); K.circle(10, -12, 7, '#fff', C.ink, 2); K.circle(-9, -11, 3, C.ink); K.circle(11, -11, 3, C.ink);
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-18, -24); ctx.lineTo(-4, -20); ctx.moveTo(18, -24); ctx.lineTo(4, -20); ctx.stroke();
+    for (let k = 0; k < 8; k++) K.circle(-56 + k * 16, 16, 3, k % 2 ? C.lemon : C.mint);
+  }
+  ctx.restore();
+}
+function hud() {
+  K.text(score.toLocaleString(), 14, 22, 22, C.cream, 'left');
+  K.text(`Wave ${wave}`, W - 14, 22, 15, C.lemon, 'right', 700);
+  ships.forEach((s, k) => { for (let i = 0; i < s.lives; i++) { ctx.save(); ctx.translate((k ? W - 22 - i * 20 : 22 + i * 20), H - 18); ctx.scale(.45, .45); ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(18, 12); ctx.lineTo(-18, 12); ctx.closePath(); ctx.fillStyle = s.color; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 4; ctx.stroke(); ctx.restore(); } });
+  const boss = foes.find(f => f.type === 'boss');
+  if (boss) { ctx.fillStyle = 'rgba(0,0,0,.5)'; K.rr(60, 44, W - 120, 12, 6); ctx.fill(); ctx.fillStyle = C.tomato; K.rr(60, 44, (W - 120) * boss.hp / boss.max, 12, 6); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2; K.rr(60, 44, W - 120, 12, 6); ctx.stroke(); }
+}
+
+function draw() {
+  ctx.fillStyle = '#0d0b22'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W * .7, H * .25, 10, W * .7, H * .25, 260); g.addColorStop(0, 'rgba(142,108,240,.25)'); g.addColorStop(1, 'rgba(142,108,240,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (const s of stars) { ctx.fillStyle = `rgba(255,244,224,${.25 + s.z * .2})`; ctx.fillRect(s.x, s.y, s.z, s.z * (state === 'play' ? 3 : 1)); }
+  if (state === 'menu') {
+    drawShip({ x: W / 2 - 50, y: 470 + Math.sin(K.t * 2) * 8, color: C.lemon, alive: true, inv: 0, tilt: Math.sin(K.t) * .2, shield: 0 });
+    drawShip({ x: W / 2 + 50, y: 470 + Math.cos(K.t * 2) * 8, color: C.mint, alive: true, inv: 0, tilt: Math.cos(K.t) * .2, shield: 0 });
+    drawFoe({ type: 'bug', x: 120 + Math.sin(K.t) * 30, y: 330, flash: 0 }); drawFoe({ type: 'shooter', x: 360, y: 300 + Math.sin(K.t * 1.5) * 10, flash: 0 });
+    K.text('Sky Swarm', W / 2, 110, 64, C.cream);
+    K.text('Blast the bugs. Grab the snacks.', W / 2, 160, 18, C.lemon, 'center', 700);
+    if (K.button(W / 2 - 110, 196, 220, 56, '1 Player', { key: '1' }) || K.hit('Digit1')) newGame(1);
+    if (K.button(W / 2 - 110, 266, 220, 56, '2 Players co-op', { key: '2', bg: C.mint, size: 18 }) || K.hit('Digit2')) newGame(2);
+    if (!K.touch) {
+      K.text('P1: W A S D   ·   P2: arrow keys', W / 2, 548, 15, C.cream, 'center', 700, false);
+      K.text('Your guns fire on their own. Solo? Arrows work too.', W / 2, 574, 13, 'rgba(255,244,224,.7)', 'center', 600, false);
+    } else K.text('Drag anywhere to fly. Guns fire on their own.', W / 2, 560, 15, C.cream, 'center', 700);
+    K.snack('chili', 120, 612, 10); K.text('power', 150, 612, 12, C.cream, 'left', 700, false);
+    K.snack('donut', 230, 612, 10); K.text('shield', 252, 612, 12, C.cream, 'left', 700, false);
+    K.snack('cherry', 340, 612, 10); K.text('+1 life', 360, 612, 12, C.cream, 'left', 700, false);
+    const b = K.best('swarm'); if (b) K.text(`Best ${b.toLocaleString()}`, W / 2, 350, 14, C.lemon, 'center', 700, false);
+    return;
+  }
+  for (const d of drops) { K.circle(d.x, d.y, 18, 'rgba(255,244,224,.12)'); K.snack(d.type, d.x, d.y, 12, Math.sin(d.t * 4) * .3); }
+  foes.forEach(drawFoe);
+  for (const b of shots) { ctx.fillStyle = ships[b.owner].color; K.rr(b.x - 2.5, b.y - 9, 5, 16, 3); ctx.fill(); }
+  for (const b of bullets) { K.circle(b.x, b.y, b.r + 2, 'rgba(255,93,162,.35)'); K.circle(b.x, b.y, b.r, '#ff9ccf', C.ink, 1.5); }
+  ships.forEach(drawShip);
+  K.drawParts();
+  hud();
+  if (bannerT > 0 && state === 'play') { ctx.globalAlpha = Math.min(1, bannerT * 2); K.text(banner, W / 2, H / 2 - 40, 38, banner.startsWith('Big') ? C.tomato : C.cream); ctx.globalAlpha = 1; }
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(13,11,34,.8)'; ctx.fillRect(0, 0, W, H);
+    K.text('Shot down!', W / 2, 200, 54, C.tomato);
+    K.text(`${score.toLocaleString()} points · wave ${wave}`, W / 2, 256, 22, C.cream, 'center', 700);
+    const best = K.best(mode === 1 ? 'swarm' : 'swarm2');
+    K.text(score >= best && score > 0 ? 'New best!' : `Best ${best.toLocaleString()}`, W / 2, 290, 16, C.lemon, 'center', 700);
+    if (mode === 2) K.text('Co-op runs don’t go on the leaderboard', W / 2, 318, 13, 'rgba(255,244,224,.6)', 'center', 600, false);
+    if (K.t - endAt > .7) {
+      if (K.button(W / 2 - 110, 350, 220, 56, 'Fly again', { key: 'Enter' }) || K.hit('Enter', 'Space')) newGame(mode);
+      if (K.button(W / 2 - 110, 420, 220, 56, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

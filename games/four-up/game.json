@@ -1,0 +1,17 @@
+{
+  "title": "Four Up",
+  "description": "Drop your snacks into the rack and get four in a row: across, down or diagonal. Easy if you're warming up, Hard if you want the CPU to properly think about it. Or pass-and-play with whoever's sitting next to you.",
+  "instructions": "Click a column to drop. Or use the left and right arrows and Space, or press 1 to 7. Two players take turns on the same controls.",
+  "category": "strategy",
+  "tags": [
+    "2-player",
+    "board game",
+    "classic",
+    "brainy"
+  ],
+  "aspect": "4:3",
+  "accent": "#3346ff",
+  "seed": 74,
+  "featured": false,
+  "order": 7
+}

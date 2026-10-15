@@ -58,6 +58,10 @@ export function createGameHost() {
   app.get('/robots.txt', (_req, res) => res.type('text/plain').send('User-agent: *\nAllow: /\n'));
   app.get('/sdk.js', (_req, res) => { res.type('application/javascript').set('Access-Control-Allow-Origin', '*').send(sdkSource()); });
 
+  // Shared kit for the built-in games, and the site font so games don't need Google Fonts.
+  app.use('/kit', express.static(path.join(config.builtinGamesDir, '_kit'), { setHeaders, maxAge: '1h' }));
+  app.use('/fonts', express.static(path.join(config.publicDir, 'fonts'), { setHeaders, maxAge: '30d', immutable: true }));
+
   for (const [prefix, root] of [['/builtin', config.builtinGamesDir], ['/g', storageDir]]) {
     app.use(`${prefix}/:slug`, (req, res, next) => {
       if (!/^[a-z0-9-]+$/.test(req.params.slug)) return res.sendStatus(404);

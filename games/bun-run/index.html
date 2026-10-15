@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Bun Run</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#ffd8a8}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 800, H: 450 }), { ctx, C } = K, W = 800, H = 450;
+const BX = 180, R = 18, G = 2100, JUMP = -760, JUMP2 = -660;
+let state = 'menu', segs, items, spikes, bun, scroll, speed, genX, snacks, endAt = 0, holding = false;
+
+function newGame() {
+  segs = [{ x: -200, w: 1100, y: 340 }]; items = []; spikes = [];
+  lastG = segs[0]; genX = 900; scroll = 0; speed = 290; snacks = 0;
+  bun = { y: 340 - R, vy: 0, ground: true, jumps: 0, hold: 0, rot: 0, squash: 0, dead: false };
+  state = 'play'; K.playing = true; K.clearParts();
+  while (genX < scroll + W + 400) gen();
+}
+function gen() {
+  const hard = Math.min(1, scroll / 12000);
+  const gap = Math.random() < .25 ? 0 : K.rnd(70, 120 + hard * 90) * (speed / 300);
+  const y = K.clamp(lastG.y + K.rnd(-70, 60), 210, 390);
+  const w = K.rnd(260, 520) - hard * 120;
+  const x = lastG.x + lastG.w + gap;
+  const seg = { x, w, y };
+  segs.push(seg);
+  if (gap > 150 && Math.random() < .6) segs.push({ x: x - gap / 2 - 50, w: 100, y: Math.min(lastG.y, y) - 90, float: true });
+  if (w > 300 && Math.random() < .3 + hard * .4) spikes.push({ x: x + K.rnd(110, w - 80), y, n: Math.random() < hard ? 2 : 1 });
+  if (Math.random() < .7) { const n = 5, sx = x + K.rnd(40, Math.max(60, w - 200)); for (let i = 0; i < n; i++) items.push({ x: sx + i * 34, y: y - 44 - Math.sin(i / (n - 1) * Math.PI) * 60, kind: K.pick(['cherry', 'candy', 'berry']), got: false }); }
+  lastG = seg; genX = x + w;
+}
+let lastG = null;
+
+function jump() {
+  if (state !== 'play') return;
+  if (bun.ground || bun.coyote > 0) { bun.vy = JUMP; bun.ground = false; bun.jumps = 1; bun.hold = 0; bun.coyote = 0; K.sfx(420, .1, 'triangle', .05, 300); }
+  else if (bun.jumps < 2) { bun.vy = JUMP2; bun.jumps = 2; bun.hold = 0; K.sfx(620, .1, 'triangle', .05, 400); K.burst(BX, bun.y + R, 8, [C.cream], 100, .3, 3); }
+}
+function die(why) {
+  if (bun.dead) return;
+  bun.dead = true; bun.why = why; state = 'over'; endAt = K.t; K.playing = false;
+  K.shake(.5); K.sfx(200, .5, 'sawtooth', .05, -150);
+  const sc = score(); K.saveBest('bun', sc); K.submit(sc);
+}
+const score = () => Math.floor(scroll / 10) + snacks * 25;
+
+function update(dt) {
+  if (state === 'menu') return;
+  if (state === 'over') { if (bun.why === 'fall') { bun.vy += G * dt; bun.y += bun.vy * dt; } return; }
+  const wantJump = K.hit('Space', 'ArrowUp', 'KeyW', 'Enter') || K.tapped();
+  if (wantJump) jump();
+  holding = K.key('Space', 'ArrowUp', 'KeyW', 'Enter') || K.pointers().length > 0;
+  speed = Math.min(600, 290 + scroll / 70);
+  scroll += speed * dt;
+  while (genX < scroll + W + 400) gen();
+  segs = segs.filter(s => s.x + s.w > scroll - 200); items = items.filter(i => i.x > scroll - 100 && !i.got); spikes = spikes.filter(s => s.x > scroll - 100);
+  // physics
+  const g = bun.vy < 0 && holding && bun.hold < .22 ? G * .45 : G;
+  bun.hold += dt; bun.coyote = Math.max(0, (bun.coyote || 0) - dt);
+  const prevBottom = bun.y + R;
+  bun.vy += g * dt; bun.y += bun.vy * dt;
+  const wx = scroll + BX;
+  const wasGround = bun.ground; bun.ground = false;
+  for (const s of segs) {
+    if (wx + R * .6 < s.x || wx - R * .6 > s.x + s.w) continue;
+    if (bun.vy >= 0 && prevBottom <= s.y + 2 && bun.y + R >= s.y) { bun.y = s.y - R; bun.vy = 0; bun.ground = true; bun.jumps = 0; if (!wasGround) { bun.squash = 1; K.burst(BX, s.y, 5, ['#e9c48a'], 80, .25, 2.5); } }
+  }
+  if (wasGround && !bun.ground && bun.vy >= 0) bun.coyote = .09;
+  // walls: running into the side of a higher block
+  for (const s of segs) if (!s.float && wx + R > s.x && wx + R < s.x + 20 && bun.y + R > s.y + 8) { die('wall'); return; }
+  for (const sp of spikes) if (Math.abs(wx - (sp.x + sp.n * 9)) < sp.n * 9 + R * .6 && bun.y + R > sp.y - 18) { die('fork'); return; }
+  for (const it of items) if (!it.got && Math.hypot(it.x - wx, it.y - bun.y) < R + 12) { it.got = true; snacks++; K.sfx(1000 + (snacks % 5) * 90, .07, 'triangle', .04, 300); K.burst(BX, bun.y, 6, [C.lemon, C.gum], 110, .35, 2.5); }
+  if (bun.y > H + 60) { bun.why = 'fall'; die('fall'); }
+  bun.rot += (bun.ground ? speed / R : speed / R * .6) * dt;
+  bun.squash = Math.max(0, bun.squash - dt * 5);
+}
+
+function back() {
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#ffb877'); g.addColorStop(1, '#ffe2bd');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  K.circle(640, 110, 54, 'rgba(255,244,224,.85)');
+  const hills = [['#f5a46a', .15, 80, 300], ['#e98a52', .35, 60, 350]];
+  for (const [col, par, amp, base] of hills) {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, H);
+    for (let x = 0; x <= W + 20; x += 20) { const u = (x + (scroll || K.t * 80) * par) * .006; ctx.lineTo(x, base - Math.abs(Math.sin(u)) * amp - Math.sin(u * 2.3) * amp * .3); }
+    ctx.lineTo(W, H); ctx.fill();
+  }
+}
+function drawSeg(s, off) {
+  const x = s.x - off, y = s.y, w = s.w, h = s.float ? 22 : H - y + 20;
+  ctx.fillStyle = 'rgba(21,19,31,.2)'; K.rr(x + 4, y + 6, w, h, 12); ctx.fill();
+  ctx.fillStyle = s.float ? '#e9a95c' : '#c97b3f'; K.rr(x, y, w, h, 12); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = s.float ? '#ffd29a' : '#f0a245'; K.rr(x + 4, y + 3, w - 8, 12, 6); ctx.fill();
+  if (!s.float) { ctx.fillStyle = 'rgba(21,19,31,.12)'; for (let k = 30; k < w - 20; k += 46) K.circle(x + k, y + 40 + (k % 3) * 14, 5, 'rgba(21,19,31,.12)'); }
+}
+function drawFork(sp, off) {
+  for (let i = 0; i < sp.n; i++) {
+    const x = sp.x - off + i * 18;
+    ctx.fillStyle = '#cfd3e0'; ctx.strokeStyle = C.ink; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, sp.y); for (let k = 0; k < 3; k++) { ctx.lineTo(x + 2 + k * 6, sp.y - 20); ctx.lineTo(x + 5 + k * 6, sp.y - 20); ctx.lineTo(x + 6 + k * 6, sp.y - 8); } ctx.lineTo(x + 18, sp.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+  }
+}
+function drawBun(y) {
+  const sq = bun.squash * .2, st = bun.ground ? 0 : K.clamp(-bun.vy / 4000, -.1, .15);
+  ctx.save(); ctx.translate(BX, y); ctx.scale(1 + sq - st * .5, 1 - sq + st);
+  // little legs
+  if (state !== 'over') { const ph = bun.rot * .9; ctx.strokeStyle = C.ink; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-6, R - 4); ctx.lineTo(-6 + Math.sin(ph) * 7, R + 6); ctx.moveTo(6, R - 4); ctx.lineTo(6 - Math.sin(ph) * 7, R + 6); ctx.stroke(); }
+  ctx.beginPath(); ctx.ellipse(0, 4, R + 2, R - 2, 0, Math.PI, 0); ctx.lineTo(R + 2, 8); ctx.quadraticCurveTo(0, 14, -R - 2, 8); ctx.closePath();
+  ctx.fillStyle = '#f0a245'; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#7bd94a'; ctx.fillRect(-R, 8, R * 2, 4);
+  ctx.beginPath(); ctx.ellipse(0, 12, R, 6, 0, 0, Math.PI); ctx.fillStyle = '#e8963a'; ctx.fill(); ctx.stroke();
+  for (const [sx, sy] of [[-9, -10], [0, -14], [9, -9], [-3, -5], [12, -2]]) { ctx.fillStyle = '#fff4e0'; ctx.beginPath(); ctx.ellipse(sx, sy, 2.5, 1.4, .4, 0, Math.PI * 2); ctx.fill(); }
+  const dead = state === 'over';
+  if (dead) { ctx.strokeStyle = C.ink; ctx.lineWidth = 2; for (const ex of [1, 11]) { ctx.beginPath(); ctx.moveTo(ex - 3, -3); ctx.lineTo(ex + 3, 3); ctx.moveTo(ex + 3, -3); ctx.lineTo(ex - 3, 3); ctx.stroke(); } }
+  else { K.circle(3, 0, 3.6, '#fff', C.ink, 1.5); K.circle(13, 0, 3.6, '#fff', C.ink, 1.5); K.circle(4.5, 0, 1.8, C.ink); K.circle(14.5, 0, 1.8, C.ink); }
+  ctx.restore();
+}
+
+function draw() {
+  back();
+  if (state === 'menu') {
+    const off = K.t * 200;
+    for (let k = -1; k < 4; k++) { const x = Math.floor(off / 300) * 300 + k * 300; drawSeg({ x, w: 240, y: 330 + (((x / 300) % 2 + 2) % 2) * 30 }, off); }
+    bun = bun || { y: 0, vy: 0, ground: true, squash: 0, rot: 0 };
+    bun.rot = K.t * 12; bun.ground = true; drawBun(300 - Math.abs(Math.sin(K.t * 2.5)) * 70);
+    K.text('Bun Run', W / 2, 100, 76, C.cream, 'center', 800, C.ink);
+    K.text('It runs. You jump. Twice if you have to.', W / 2, 152, 18, C.ink, 'center', 800, false);
+    if (K.button(W / 2 - 100, 186, 200, 60, 'Run!', { key: 'Enter' }) || K.hit('Enter', 'Space')) newGame();
+    K.text(K.touch ? 'Tap to jump, tap again in the air to double jump' : 'Space or ↑ to jump · hold for higher · tap again to double jump', W / 2, 272, 15, C.ink, 'center', 700, false);
+    const b = K.best('bun'); if (b) K.text(`Best ${b.toLocaleString()}`, W / 2, 298, 14, C.ink, 'center', 800, false);
+    return;
+  }
+  const off = scroll;
+  for (const s of segs) drawSeg(s, off);
+  for (const sp of spikes) drawFork(sp, off);
+  for (const it of items) if (!it.got) K.snack(it.kind, it.x - off, it.y + Math.sin(K.t * 5 + it.x) * 3, 11);
+  drawBun(bun.y);
+  K.drawParts();
+  K.text(score().toLocaleString(), 20, 30, 28, C.cream, 'left', 800, C.ink);
+  K.snack('cherry', W - 80, 30, 11); K.text(`× ${snacks}`, W - 64, 31, 18, C.cream, 'left', 800, C.ink);
+  if (state === 'over' && K.t - endAt > .5) {
+    ctx.fillStyle = 'rgba(21,19,31,.55)'; ctx.fillRect(0, 0, W, H);
+    K.text({ wall: 'Bonk!', fork: 'Forked!', fall: 'Down the gap!' }[bun.why] || 'Ouch!', W / 2, 140, 60, C.lemon, 'center', 800, C.ink);
+    K.text(`${score().toLocaleString()} points · ${snacks} snacks`, W / 2, 196, 22, C.cream);
+    const best = K.best('bun'); K.text(score() >= best && score() > 0 ? 'New best!' : `Best ${best.toLocaleString()}`, W / 2, 228, 16, C.lemon, 'center', 700);
+    if (K.button(W / 2 - 210, 264, 190, 56, 'Run again', { key: 'Enter' }) || K.hit('Enter', 'Space')) newGame();
+    if (K.button(W / 2 + 20, 264, 190, 56, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "title": "Memory Munch",
+  "description": "Twenty cards, ten pairs of snacks, face down. Flip two at a time and remember where everything is. Play solo for the best score, or take turns with a friend: find a pair and you go again.",
+  "instructions": "Click or tap a card to flip it. Or use the arrow keys and Space. Two players take turns.",
+  "category": "puzzle",
+  "tags": [
+    "2-player",
+    "memory",
+    "cards",
+    "chill"
+  ],
+  "aspect": "4:3",
+  "accent": "#ff5da2",
+  "seed": 72,
+  "featured": false,
+  "order": 15
+}

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Jelly Jump</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#7fd3ff}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 480, H: 640 }), { ctx, C } = K, W = 480, H = 640;
+const PW = 74, PH = 14, BOUNCE = -640, SPRING = -1040, G = 1450;
+let state = 'menu', jelly, plats, foes, candies, camY, topGen, maxH, candyCount, endAt = 0, lastMouseX = null;
+
+function newGame() {
+  jelly = { x: W / 2, y: H - 120, vx: 0, vy: BOUNCE, squash: 0, face: 1, dead: false };
+  plats = [{ x: W / 2 - PW / 2, y: H - 70, type: 'normal' }]; foes = []; candies = [];
+  camY = 0; topGen = H - 70; maxH = 0; candyCount = 0;
+  while (topGen > -H) gen();
+  state = 'play'; K.playing = true; K.clearParts();
+}
+function gen() {
+  const height = -topGen;
+  const gap = K.clamp(58 + height * .012, 58, 128) * K.rnd(.8, 1.1);
+  topGen -= gap;
+  const roll = Math.random(), lvl = Math.min(1, height / 6000);
+  let type = 'normal';
+  if (roll < .12 + lvl * .18) type = 'move'; else if (roll < .2 + lvl * .25) type = 'crumble'; else if (roll < .26 + lvl * .25) type = 'spring';
+  const p = { x: K.rnd(6, W - PW - 6), y: topGen, type, vx: type === 'move' ? K.pick([-1, 1]) * K.rnd(60, 90 + lvl * 80) : 0, gone: false };
+  plats.push(p);
+  // a crumbly one can't be the only way up: add a safe one nearby
+  if (type === 'crumble') plats.push({ x: (p.x + W / 2 + K.rnd(-60, 60)) % (W - PW), y: topGen - gap * .5, type: 'normal', vx: 0 });
+  if (Math.random() < .22) candies.push({ x: p.x + PW / 2, y: p.y - 36, t: Math.random() * 6, kind: K.pick(['candy', 'cherry', 'berry']) });
+  if (height > 900 && Math.random() < .05 + lvl * .07) foes.push({ x: K.rnd(30, W - 30), y: topGen - gap / 2, vx: K.rnd(40, 90) * K.pick([-1, 1]), t: 0, dead: false });
+}
+
+function die() {
+  if (jelly.dead) return;
+  jelly.dead = true; state = 'over'; endAt = K.t; K.playing = false;
+  const sc = score(); K.saveBest('jelly', sc); K.submit(sc);
+  K.sfx(400, .7, 'triangle', .06, -320);
+}
+const score = () => Math.floor(maxH / 10) + candyCount * 50;
+
+function update(dt) {
+  if (state === 'menu') return;
+  if (state !== 'play') { jelly.vy += G * dt; jelly.y += jelly.vy * dt; return; }
+  // steering: keys, or hold either side of the screen, or the mouse
+  let ix = (K.key('KeyD', 'ArrowRight') ? 1 : 0) - (K.key('KeyA', 'ArrowLeft') ? 1 : 0);
+  const p = K.pointers()[0];
+  if (!ix && p) ix = p.x < W / 2 ? -1 : 1;
+  if (!ix && K.mouse && !K.touch && !p) { if (lastMouseX !== null && Math.abs(K.mouse.x - lastMouseX) > 1) mouseMode = true; lastMouseX = K.mouse.x; if (mouseMode) { const d = K.mouse.x - jelly.x; ix = Math.abs(d) > 8 ? K.clamp(d / 60, -1, 1) : 0; } }
+  if (K.key('KeyD', 'ArrowRight', 'KeyA', 'ArrowLeft')) mouseMode = false;
+  jelly.vx = K.lerp(jelly.vx, ix * 330, Math.min(1, dt * 9));
+  if (ix) jelly.face = Math.sign(ix);
+  const oldY = jelly.y;
+  jelly.vy += G * dt; jelly.x += jelly.vx * dt; jelly.y += jelly.vy * dt;
+  if (jelly.x < -16) jelly.x += W + 32; if (jelly.x > W + 16) jelly.x -= W + 32;
+  jelly.squash = Math.max(0, jelly.squash - dt * 5);
+  // platforms
+  for (const pl of plats) {
+    if (pl.type === 'move') { pl.x += pl.vx * dt; if (pl.x < 4 || pl.x > W - PW - 4) pl.vx *= -1; }
+    if (pl.falling) { pl.y += 420 * dt; continue; }
+    if (jelly.vy > 0 && oldY + 18 <= pl.y && jelly.y + 18 >= pl.y && jelly.x > pl.x - 12 && jelly.x < pl.x + PW + 12) {
+      jelly.y = pl.y - 18; jelly.squash = 1;
+      if (pl.type === 'spring') { jelly.vy = SPRING; pl.boing = K.t; K.sfx(300, .35, 'triangle', .06, 700); }
+      else { jelly.vy = BOUNCE; K.sfx(420 + Math.random() * 60, .07, 'triangle', .04, 200); }
+      if (pl.type === 'crumble') { pl.falling = true; K.burst(pl.x + PW / 2, pl.y, 10, ['#e9c48a', '#b88a4f'], 120, .5, 3, 400); K.noise(.15, .05, 600); }
+      K.burst(jelly.x, jelly.y + 16, 5, ['rgba(255,255,255,.9)'], 70, .3, 2.5);
+    }
+  }
+  // foes
+  for (const f of foes) {
+    if (f.dead) { f.y += 500 * dt; continue; }
+    f.t += dt; f.x += f.vx * dt; if (f.x < 20 || f.x > W - 20) f.vx *= -1;
+    const dx = jelly.x - f.x, dy = jelly.y - (f.y + Math.sin(f.t * 3) * 6);
+    if (Math.hypot(dx, dy) < 30) {
+      if (jelly.vy > 0 && dy < -6) { f.dead = true; jelly.vy = BOUNCE * 1.1; K.sfx(200, .2, 'square', .05, 500); K.burst(f.x, f.y, 16, [C.grape, C.cream], 200, .6, 3); candyCount += 2; }
+      else { K.shake(.5); jelly.vy = 200; die(); }
+    }
+  }
+  // candies
+  for (const c of candies) if (!c.got && Math.hypot(c.x - jelly.x, c.y - jelly.y) < 28) { c.got = true; candyCount++; K.sfx(1100, .08, 'triangle', .05, 400); K.burst(c.x, c.y, 8, [C.lemon, C.gum], 120, .4, 2.5); }
+  // camera + world upkeep
+  camY = Math.min(camY, jelly.y - H * .42);
+  maxH = Math.max(maxH, -(jelly.y - (H - 120)));
+  while (topGen > camY - 120) gen();
+  plats = plats.filter(p => p.y < camY + H + 60); foes = foes.filter(f => f.y < camY + H + 60); candies = candies.filter(c => !c.got && c.y < camY + H + 60);
+  if (jelly.y > camY + H + 40) die();
+}
+let mouseMode = false;
+
+function sky() {
+  const h = Math.min(1, maxH / 9000 || 0);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, `hsl(${205 - h * 160}, ${70 - h * 20}%, ${70 - h * 52}%)`); g.addColorStop(1, `hsl(${195 - h * 120}, 80%, ${84 - h * 48}%)`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  if (h > .5) for (let i = 0; i < 40; i++) { ctx.fillStyle = `rgba(255,255,255,${(h - .5) * 1.4})`; ctx.fillRect((i * 137) % W, ((i * 91 - camY * .05) % H + H) % H, 2, 2); }
+  ctx.fillStyle = 'rgba(255,255,255,.55)';
+  for (let i = 0; i < 6; i++) { const y = ((i * 170 - camY * .3) % (H + 120) + H + 120) % (H + 120) - 60, x = (i * 173) % W; ctx.beginPath(); ctx.ellipse(x, y, 48, 16, 0, 0, Math.PI * 2); ctx.ellipse(x + 30, y - 8, 30, 14, 0, 0, Math.PI * 2); ctx.fill(); }
+}
+function drawPlat(p) {
+  const y = p.y - camY, x = p.x;
+  const col = { normal: '#e9a95c', move: '#4fc3f7', crumble: '#e9c48a', spring: '#e9a95c' }[p.type];
+  ctx.fillStyle = 'rgba(21,19,31,.25)'; K.rr(x + 3, y + 4, PW, PH, 7); ctx.fill();
+  ctx.fillStyle = col; K.rr(x, y, PW, PH, 7); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.stroke();
+  if (p.type === 'crumble') { ctx.strokeStyle = 'rgba(21,19,31,.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x + 22, y + 2); ctx.lineTo(x + 28, y + 12); ctx.moveTo(x + 50, y + 2); ctx.lineTo(x + 44, y + 12); ctx.stroke(); }
+  else for (let i = 0; i < 4; i++) K.circle(x + 14 + i * 15, y + 7, 1.8, 'rgba(21,19,31,.35)');
+  if (p.type === 'spring') {
+    const st = p.boing && K.t - p.boing < .2 ? 10 : 0;
+    ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x + PW / 2 - 8, y); for (let i = 1; i <= 4; i++) ctx.lineTo(x + PW / 2 + (i % 2 ? 8 : -8), y - i * (3 + st / 4)); ctx.stroke();
+    ctx.fillStyle = C.tomato; K.rr(x + PW / 2 - 12, y - 16 - st, 24, 6, 3); ctx.fill(); ctx.stroke();
+  }
+}
+function drawJelly() {
+  const x = jelly.x, y = jelly.y - camY;
+  const stretch = K.clamp(-jelly.vy / 2400, -.15, .25) - jelly.squash * .25;
+  ctx.save(); ctx.translate(x, y + 4); ctx.scale(1 - stretch * .6, 1 + stretch);
+  ctx.beginPath(); ctx.moveTo(-18, 14); ctx.quadraticCurveTo(-20, -20, 0, -20); ctx.quadraticCurveTo(20, -20, 18, 14); ctx.quadraticCurveTo(0, 18, -18, 14); ctx.closePath();
+  ctx.fillStyle = C.gum; ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.ellipse(-8, -10, 5, 3.5, -.5, 0, Math.PI * 2); ctx.fill();
+  const lx = jelly.face * 3;
+  K.circle(-6 + lx, -2, 4, '#fff', C.ink, 1.8); K.circle(6 + lx, -2, 4, '#fff', C.ink, 1.8);
+  K.circle(-5 + lx * 1.4, -1, 1.8, C.ink); K.circle(7 + lx * 1.4, -1, 1.8, C.ink);
+  ctx.beginPath(); ctx.arc(lx, 5, 4, .1, Math.PI - .1); ctx.stroke();
+  ctx.restore();
+}
+function drawFoe(f) {
+  const x = f.x, y = f.y - camY + Math.sin(f.t * 3) * 6;
+  ctx.save(); ctx.translate(x, y); if (f.dead) ctx.rotate(K.t * 8);
+  ctx.fillStyle = C.grape; ctx.beginPath();
+  for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, r = i % 2 ? 15 : 21; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+  ctx.closePath(); ctx.fill(); ctx.strokeStyle = C.ink; ctx.lineWidth = 2.5; ctx.stroke();
+  K.circle(-5, -2, 4, '#fff', C.ink, 1.5); K.circle(5, -2, 4, '#fff', C.ink, 1.5); K.circle(-4, -1, 2, C.ink); K.circle(6, -1, 2, C.ink);
+  ctx.strokeStyle = C.ink; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-9, -8); ctx.lineTo(-2, -5); ctx.moveTo(9, -8); ctx.lineTo(2, -5); ctx.stroke();
+  ctx.restore();
+}
+
+function draw() {
+  if (state === 'menu') { maxH = 0; camY = 0; }
+  sky();
+  if (state === 'menu') {
+    for (const [x, y, t] of [[60, 520, 'normal'], [300, 430, 'move'], [130, 340, 'spring'], [340, 560, 'crumble']]) drawPlat({ x, y, type: t });
+    jelly = jelly || { face: 1, squash: 0 };
+    Object.assign(jelly, { x: 97, y: 520 - 18 - Math.abs(Math.sin(K.t * 3.2)) * 120, vy: Math.cos(K.t * 3.2) * -640 * Math.sign(Math.sin(K.t * 3.2)), squash: Math.abs(Math.sin(K.t * 3.2)) < .1 ? 1 : 0 });
+    drawJelly();
+    K.text('Jelly Jump', W / 2, 110, 62, C.gum, 'center', 800, C.ink);
+    K.text('Bounce up. Don’t look down.', W / 2, 160, 18, C.ink, 'center', 800, false);
+    if (K.button(W / 2 - 100, 200, 200, 60, 'Play', { key: 'Enter' }) || K.hit('Enter', 'Space')) newGame();
+    K.text(K.touch ? 'Hold the left or right side to steer' : '← → or A D to steer (or the mouse)', W / 2, 290, 15, C.ink, 'center', 700, false);
+    K.text('Stomp the spiky ones. Wafer platforms crumble.', W / 2, 314, 14, C.ink, 'center', 600, false);
+    const b = K.best('jelly'); if (b) K.text(`Best ${b.toLocaleString()}`, W / 2, 612, 14, C.ink, 'center', 800, false);
+    return;
+  }
+  plats.forEach(drawPlat);
+  for (const c of candies) { c.t += .016; K.snack(c.kind, c.x, c.y - camY + Math.sin(c.t * 3) * 4, 11); }
+  foes.forEach(drawFoe);
+  drawJelly();
+  ctx.save(); ctx.translate(0, -camY); K.drawParts(); ctx.restore();
+  K.text(score().toLocaleString(), 16, 26, 26, C.cream, 'left', 800, 'rgba(21,19,31,.6)');
+  K.snack('candy', W - 70, 26, 10); K.text(`× ${candyCount}`, W - 54, 27, 17, C.cream, 'left', 800, 'rgba(21,19,31,.6)');
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(21,19,31,.55)'; ctx.fillRect(0, 0, W, H);
+    K.text('Splat!', W / 2, 200, 64, C.gum);
+    K.text(`${score().toLocaleString()} points`, W / 2, 260, 26, C.cream);
+    const best = K.best('jelly');
+    K.text(score() >= best && score() > 0 ? 'New best!' : `Best ${best.toLocaleString()}`, W / 2, 296, 16, C.lemon, 'center', 700);
+    if (K.t - endAt > .6) {
+      if (K.button(W / 2 - 100, 340, 200, 58, 'Bounce again', { key: 'Enter', size: 18 }) || K.hit('Enter', 'Space')) newGame();
+      if (K.button(W / 2 - 100, 412, 200, 58, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>
