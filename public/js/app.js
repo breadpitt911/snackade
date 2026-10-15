@@ -1,5 +1,4 @@
 import { state, api, setMe, onMeChange, setRouter, go, esc, icon, logo, levelRing, avatarHtml, fmt, $ } from './core.js';
-import { loadingArt } from './art.js';
 
 const ROUTES = [
   [/^\/$/, () => import('./views/home.js')],
@@ -14,6 +13,7 @@ const ROUTES = [
   [/^\/(login|signup)\/?$/, () => import('./views/auth.js')],
   [/^\/(terms|privacy)\/?$/, () => import('./views/legal.js')],
   [/^\/admin\/reports\/?$/, () => import('./views/admin.js')],
+  [/^\/admin(?:\/(games|players))?\/?$/, () => import('./views/dashboard.js')],
 ];
 
 const main = document.getElementById('main');
@@ -27,7 +27,9 @@ async function route() {
   const match = ROUTES.find(([re]) => re.test(path));
   if (!match) return notFound();
   // First load: the server already put this page's content in <main>, so keep it on screen until the real view is ready.
-  if (!main.querySelector('[data-ssr]')) main.innerHTML = `<div class="loading" aria-label="Loading">${loadingArt()}</div>`;
+  // Otherwise keep the old page up for a beat, and only swap in a skeleton if loading takes a while.
+  progress.start();
+  const skTimer = main.querySelector('[data-ssr]') ? null : setTimeout(() => { if (token === navToken) main.innerHTML = skeleton(path); }, 140);
   try {
     const mod = await match[1]();
     if (token !== navToken) return;
@@ -35,6 +37,7 @@ async function route() {
     const out = await mod.render(main, params, new URLSearchParams(location.search));
     if (token !== navToken) { out?.(); return; }
     cleanup = typeof out === 'function' ? out : null;
+    main.firstElementChild?.classList.add('view-in');
   } catch (e) {
     if (token !== navToken) return;
     if (e.status === 404) return notFound(e.message);
@@ -42,10 +45,32 @@ async function route() {
     main.innerHTML = `<div class="wrap empty"><h2>Well, that didn't load</h2><p class="muted">${esc(e.message)}</p><button class="btn" id="retry">Try again</button></div>`;
     $('#retry')?.addEventListener('click', route);
   }
+  finally { clearTimeout(skTimer); if (token === navToken) progress.done(); }
   updateNav();
   if (!location.hash) scrollTo(0, 0);
   main.focus({ preventScroll: true });
 }
+// Thin bar at the top while a page loads. Stays invisible for fast navigations.
+const progress = (() => {
+  const el = document.createElement('div');
+  el.id = 'navprog'; el.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(el);
+  let t0 = 0;
+  return {
+    start() { t0 = performance.now(); el.className = ''; void el.offsetWidth; el.className = 'run'; },
+    done() { el.className = performance.now() - t0 > 150 ? 'done' : ''; },
+  };
+})();
+const skCards = n => `<div class="shelf">${'<div class="sk-card"><div class="sk sk-img"></div><div class="sk sk-line"></div><div class="sk sk-line short"></div></div>'.repeat(n)}</div>`;
+function skeleton(path) {
+  const head = '<div class="sk sk-line big"></div><div class="sk sk-line" style="width:min(520px,80%)"></div><div style="height:26px"></div>';
+  if (path.startsWith('/game/')) return `<div class="wrap sk-wrap" aria-busy="true" aria-label="Loading"><div class="game-layout"><div><div class="sk sk-stage"></div>
+    <div style="height:22px"></div><div class="sk sk-line big"></div><div class="sk sk-line"></div><div class="sk sk-line short"></div></div>
+    <aside class="side"><div class="sk sk-panel"></div><div class="sk sk-panel"></div></aside></div></div>`;
+  if (/^\/(admin|settings|upload|login|signup|terms|privacy)/.test(path)) return `<div class="wrap sk-wrap" aria-busy="true" aria-label="Loading">${head}<div class="sk sk-panel"></div><div style="height:14px"></div><div class="sk sk-panel short"></div></div>`;
+  return `<div class="wrap sk-wrap" aria-busy="true" aria-label="Loading">${head}${skCards(path === '/' ? 5 : 10)}</div>`;
+}
+
 function notFound(msg) {
   document.title = `Not found · ${state.meta.siteName}`;
   main.innerHTML = `<div class="wrap empty" style="padding:80px 20px">${logo(90)}<h1 style="font-size:3rem">Nothing on this shelf</h1>
@@ -83,7 +108,7 @@ function toggleMenu() {
   menuEl = document.createElement('div');
   menuEl.className = 'menu'; menuEl.setAttribute('role', 'menu');
   menuEl.innerHTML = `<div class="menu-head" role="none"><b>${esc(me.displayName)}</b><small>@${esc(me.username)} · Level ${me.progress.level}</small></div>
-    <a role="menuitem" href="/u/${esc(me.username)}">Your profile</a><a role="menuitem" href="/settings">Edit profile</a><a role="menuitem" href="/upload">Upload your game</a><a role="menuitem" href="/hall-of-fame">Hall of Fame</a>${me.isAdmin ? `<a role="menuitem" href="/admin/reports">Reports${me.openReports ? ` <span class="count">${me.openReports}</span>` : ''}</a>` : ''}<hr role="none"><button role="menuitem" id="logout">Sign out</button>`;
+    <a role="menuitem" href="/u/${esc(me.username)}">Your profile</a><a role="menuitem" href="/settings">Edit profile</a><a role="menuitem" href="/upload">Upload your game</a><a role="menuitem" href="/hall-of-fame">Hall of Fame</a>${me.isAdmin ? `<a role="menuitem" href="/admin">Admin${me.openReports ? ` <span class="count" title="Open reports">${me.openReports}</span>` : ''}</a>` : ''}<hr role="none"><button role="menuitem" id="logout">Sign out</button>`;
   document.querySelector('#topbar .me').appendChild(menuEl);
   $('#avatar-btn')?.setAttribute('aria-expanded', 'true');
   menuEl.querySelector('#logout').addEventListener('click', async () => { await api('/auth/logout', { method: 'POST' }); setMe(null); closeMenu(); go('/'); });

@@ -9,6 +9,8 @@ import { RULES, LEVELS, BADGES, award, checkBadges, touchStreak, progress, forUs
 import { CATEGORY_INFO, clearSitemapCache } from './seo.js';
 import { ratingSummary, rateBlocker, rate, listComments, addComment, deleteComment, cleanBody, COMMENT_MAX, RATING_LABELS, MONTH_RULES, standings, pastWinners, monthOf, monthRange } from './community.js';
 import { REPORT_REASONS, DETAILS_MAX, ReportError, createReport, listReports, resolveReport, openReportCount, exportData, deleteAccount } from './moderation.js';
+import { admin } from './admin.js';
+import { checkGame } from './scan.js';
 import { legalPage, MIN_AGE, contactEmail } from './legal.js';
 import { processUpload, uniqueSlug, removeGameFiles, CATEGORIES, KINDS, UploadError } from './uploads.js';
 
@@ -37,7 +39,7 @@ function publicGame(g) {
     author: g.author_id ? publicUser({ username: g.a_username, display_name: g.a_display, avatar: g.a_avatar, level: g.a_level, xp: g.a_xp }) : null,
     featured: !!g.featured, status: g.status, aspect: g.aspect, plays: g.plays, likes: g.likes, sizeBytes: g.size_bytes, createdAt: g.created_at,
     rating: g.rating_count ? { avg: Math.round((g.rating_sum / g.rating_count) * 10) / 10, count: g.rating_count } : null,
-    comments: g.comment_count || 0, takenDown: !!g.taken_down,
+    comments: g.comment_count || 0, takenDown: !!g.taken_down, hosts: g.ext_hosts ? g.ext_hosts.split(',') : [],
   };
 }
 export function publicComment(c, viewer, game) {
@@ -102,6 +104,7 @@ api.post('/auth/login', (req, res) => {
   if (password.length > PASSWORD_MAX) return bad(res, "Wrong username or password.", 401);
   const u = one('SELECT * FROM users WHERE username=?', String(req.body.username || '').trim());
   if (!u || !verifyPassword(password, u.pass_hash)) return bad(res, 'Wrong username or password.', 401);
+  if (u.banned) return bad(res, `This account has been suspended. If you think that's a mistake, email ${contactEmail()}.`, 403);
   createSession(res, u.id);
   const events = touchStreak(u.id);
   res.json(meResponse(one('SELECT * FROM users WHERE id=?', u.id), events));
@@ -326,6 +329,8 @@ api.post('/upload', requireUser, uploadGate, upload.fields([{ name: 'file', maxC
     return lastInsertRowid;
   }); } catch (e) { removeGameFiles(slug); removeCover(cover); throw e; }
   const g = one(`${GAME_SELECT} WHERE g.id=?`, gameId);
+  // Automatic checks run in the background; anything bad shows up in the admin Reports queue.
+  setImmediate(() => checkGame(Number(gameId)).catch(e => console.error('scan failed', e)));
   res.json({ game: publicGame(g), events: forUser(events, req.user.id) });
 }));
 
@@ -420,6 +425,8 @@ api.post('/reports', (req, res) => {
   const kind = req.body.kind === 'comment' ? 'comment' : 'game';
   const who = req.user ? `u${req.user.id}` : ip(req);
   if (!rateLimit(`report:${who}`, req.user ? 20 : 6, 3600e3)) return bad(res, "That's a lot of reports. Try again in a bit, or email us.", 429);
+  // Hard ceiling so a flood of anonymous reports can't fill the database.
+  if (!req.user && one("SELECT COUNT(*) n FROM reports WHERE status='open' AND reporter_id IS NULL AND source='user'").n >= 2000) return bad(res, 'The report queue is full right now. Please email us instead.', 503);
   let game, comment;
   if (kind === 'comment') {
     comment = one('SELECT c.id, c.body, c.game_id, c.user_id, u.username FROM comments c JOIN users u ON u.id=c.user_id WHERE c.id=?', Number(req.body.commentId));
@@ -445,18 +452,23 @@ const requireAdmin = (req, res, next) => req.user?.is_admin ? next() : bad(res, 
 api.get('/admin/reports', requireUser, requireAdmin, (req, res) => {
   const status = req.query.status === 'closed' ? 'closed' : 'open';
   res.json({ status, open: openReportCount(), items: listReports(status).map(r => ({
-    id: r.id, kind: r.kind, reason: r.reason, details: r.details, contact: r.contact, snapshot: r.snapshot, status: r.status,
+    id: r.id, kind: r.kind, source: r.source, reason: r.reason, details: r.details, contact: r.contact, snapshot: r.snapshot, status: r.status,
     createdAt: r.created_at, resolvedAt: r.resolved_at, resolver: r.resolver_username, reporter: r.reporter_username, openSame: r.open_same,
     commentExists: !!r.comment_exists,
     game: r.slug ? { slug: r.slug, title: r.title, status: r.game_status, takenDown: !!r.taken_down, author: r.author_username, builtin: r.game_kind === 'builtin' } : null,
   })) });
 });
 api.post('/admin/reports/:id', requireUser, requireAdmin, (req, res) => {
-  try { resolveReport(Number(req.params.id), String(req.body.action || ''), req.user); }
+  try {
+    resolveReport(Number(req.params.id), String(req.body.action || ''), req.user);
+    run('INSERT INTO admin_log (admin_id, action, target, created_at) VALUES (?,?,?,?)', req.user.id, `report: ${String(req.body.action).slice(0, 20)}`, `#${Number(req.params.id)}`, now());
+  }
   catch (e) { if (e instanceof ReportError) return bad(res, e.message); throw e; }
   clearSitemapCache();
   res.json({ ok: true, open: openReportCount() });
 });
+
+api.use('/admin', requireUser, admin);
 
 // ---------- legal & your data ----------
 api.get('/legal/:page', (req, res) => {

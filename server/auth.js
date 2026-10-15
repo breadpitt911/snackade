@@ -48,7 +48,7 @@ export function loadUser(req, _res, next) {
   const t = readCookie(req, COOKIE);
   req.user = null;
   if (t && t.length < 100) {
-    const row = one(`SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token=? AND s.expires_at > ?`, t, now());
+    const row = one(`SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token=? AND s.expires_at > ? AND u.banned=0`, t, now());
     if (row) req.user = row;
   }
   next();

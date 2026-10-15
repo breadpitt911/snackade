@@ -1,4 +1,5 @@
 import { api, state, esc, ago, toast, toastError, title, requireLogin, refreshMe } from '../core.js';
+import { adminTabs } from './dashboard.js';
 
 export async function render(root, _params, qs) {
   if (!state.me) return requireLogin('Sign in as an admin to see reports.');
@@ -14,7 +15,8 @@ export async function render(root, _params, qs) {
       ? (g ? `<a href="/game/${esc(g.slug)}">${esc(g.title)}</a>${g.author ? ` by <a href="/u/${esc(g.author)}">@${esc(g.author)}</a>` : ' (original)'}${g.takenDown ? ' <span class="pill bad">taken down</span>' : g.status === 'hidden' ? ' <span class="pill">hidden</span>' : ''}` : `${esc(r.snapshot)} <span class="pill">deleted</span>`)
       : `comment on ${g ? `<a href="/game/${esc(g.slug)}#comments">${esc(g.title)}</a>` : 'a deleted game'}${r.commentExists ? '' : ' <span class="pill">deleted</span>'}`;
     const acts = status === 'open'
-      ? [r.kind === 'game' && g ? `<button class="btn small danger" data-act="takedown">Take it down</button>` : '',
+      ? [r.kind === 'game' && g ? `<button class="btn small danger" data-act="takedown">${g.takenDown ? 'Keep it down' : 'Take it down'}</button>` : '',
+         r.kind === 'game' && g?.takenDown ? `<button class="btn small" data-act="restore">Put it back live</button>` : '',
          r.kind === 'comment' && r.commentExists ? `<button class="btn small danger" data-act="delete-comment">Delete comment</button>` : '',
          `<button class="btn small" data-act="dismiss">Dismiss</button>`].join('')
       : (r.kind === 'game' && g?.takenDown ? `<button class="btn small" data-act="restore">Put it back live</button>` : '');
@@ -24,12 +26,13 @@ export async function render(root, _params, qs) {
       <p class="rtarget">${target}</p>
       ${r.kind === 'comment' ? `<blockquote>${esc(r.snapshot)}</blockquote>` : ''}
       ${r.details ? `<p class="rdetails">${esc(r.details)}</p>` : ''}
-      <p class="muted small">From ${r.reporter ? `<a href="/u/${esc(r.reporter)}">@${esc(r.reporter)}</a>` : 'a visitor'}${r.contact ? ` · <a href="mailto:${esc(r.contact)}">${esc(r.contact)}</a>` : ''}
+      <p class="muted small">From ${r.source === 'auto' ? 'the automatic check' : r.reporter ? `<a href="/u/${esc(r.reporter)}">@${esc(r.reporter)}</a>` : 'a visitor'}${r.contact ? ` · <a href="mailto:${esc(r.contact)}">${esc(r.contact)}</a>` : ''}
         ${status === 'closed' ? ` · ${esc(r.status)}${r.resolver ? ` by @${esc(r.resolver)}` : ''} ${r.resolvedAt ? ago(r.resolvedAt) : ''}` : ''}</p>
       ${acts ? `<div class="racts">${acts}</div>` : ''}</li>`;
   };
 
   root.innerHTML = `<div class="wrap admin">
+    ${adminTabs('reports', d.open)}
     <div class="page-head"><h1 style="font-size:clamp(2rem,4vw,3rem)">Reports</h1>
       <p>Copyright and malware first. Taking a game down hides it and stops the uploader from putting it back live. You can undo it from the Closed tab.</p>
       <nav class="legal-switch"><a href="/admin/reports" ${status === 'open' ? 'aria-current="page"' : ''}>Open (${d.open})</a><a href="/admin/reports?status=closed" ${status === 'closed' ? 'aria-current="page"' : ''}>Closed</a></nav></div>

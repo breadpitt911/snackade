@@ -160,7 +160,7 @@ function pageFor(pathname, query) {
       body: `<h1>${esc(l.title)}</h1><p><small>Last updated ${esc(l.updatedText)}</small></p><div class="legal-body">${l.html}</div>`,
     };
   }
-  const simple = { '/login': 'Sign in', '/signup': 'Create an account', '/settings': 'Settings', '/admin/reports': 'Reports' }[pathname];
+  const simple = { '/login': 'Sign in', '/signup': 'Create an account', '/settings': 'Settings', '/admin': 'Admin', '/admin/games': 'Admin', '/admin/players': 'Admin', '/admin/reports': 'Reports' }[pathname];
   if (simple) return { title: `${simple} · ${NAME()}`, canonical: pathname, noindex: true, description: HOME_DESC, body: `<h1>${simple}</h1>` };
   return null;
 }

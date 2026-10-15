@@ -42,6 +42,7 @@ export async function render(root, [slug]) {
         ${g.instructions ? `<div class="howto"><h3>How to play</h3><p>${esc(g.instructions)}</p></div>` : ''}
         ${g.tags.length ? `<div class="tags">${g.tags.map(t => `<a href="/games?q=${encodeURIComponent(t)}">#${esc(t)}</a>`).join('')}</div>` : ''}
         ${g.sourceUrl ? `<p class="muted" style="display:flex;gap:6px;align-items:center">${icon(g.kind === 'github' ? 'github' : 'link', 16)}<a href="${esc(g.sourceUrl)}" target="_blank" rel="noopener noreferrer">${g.kind === 'github' ? 'View source on GitHub' : 'Original site'}</a></p>` : ''}
+        ${g.hosts?.length ? `<p class="muted small hosts-line" title="${esc(g.hosts.join(', '))}">${icon('link', 14)}Loads content from ${g.hosts.length > 3 ? `${g.hosts.slice(0, 3).map(esc).join(', ')} and ${g.hosts.length - 3} more` : g.hosts.map(esc).join(', ')}</p>` : ''}
         ${d.canEdit && !state.me?.isAdmin ? '' : `<p class="report-row"><button class="linkbtn" id="report">${icon('flag', 15)}Report this game</button></p>`}
       </div>
       <section class="comments" id="comments" aria-labelledby="c-head"></section>

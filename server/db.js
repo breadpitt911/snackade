@@ -159,11 +159,21 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 CREATE INDEX IF NOT EXISTS reports_status ON reports(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS reports_game ON reports(game_id);
+CREATE TABLE IF NOT EXISTS admin_log (
+  id INTEGER PRIMARY KEY,
+  admin_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  target TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
 `);
 {
   const has = (t, c) => db.prepare(`PRAGMA table_info(${t})`).all().some(x => x.name === c);
   if (!has('users', 'agreed_at')) db.exec('ALTER TABLE users ADD COLUMN agreed_at INTEGER');
   if (!has('games', 'taken_down')) db.exec('ALTER TABLE games ADD COLUMN taken_down INTEGER NOT NULL DEFAULT 0');
+  if (!has('games', 'ext_hosts')) db.exec("ALTER TABLE games ADD COLUMN ext_hosts TEXT NOT NULL DEFAULT ''");  // other sites the game loads from
+  if (!has('users', 'banned')) db.exec('ALTER TABLE users ADD COLUMN banned INTEGER NOT NULL DEFAULT 0');
+  if (!has('reports', 'source')) db.exec("ALTER TABLE reports ADD COLUMN source TEXT NOT NULL DEFAULT 'user'");  // user | auto
 }
 
 export const one = (sql, ...p) => db.prepare(sql).get(...p);

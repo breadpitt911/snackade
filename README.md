@@ -15,6 +15,17 @@ No build step and no native dependencies: Node 22.13+ (uses the built-in SQLite)
 - **Comments** on every game. The author, the game's owner and admins can delete them, and there are spam limits.
 - **Hall of Fame** (`/hall-of-fame`): a live race for the current month and podiums for past months. Months lock in automatically within an hour of ending (UTC), using a weighted average with a 3-rating minimum. The winning maker gets 500 XP and the Game of the Month badge.
 
+## Admin
+
+The first account is the admin. Open **Admin** in the profile menu (`/admin`):
+
+- **Overview:** players, games, plays, comments, ratings, open reports, 14-day charts, upload-check status, and a log of admin actions.
+- **Games:** search and filter every game; feature, hide, take down, restore, rescan or delete.
+- **Players:** search; ban (signs them out, blocks sign-in, optionally takes down their games), unban, make or remove admins, delete.
+- **Reports:** the moderation queue.
+
+**Automatic upload checks:** every upload is scanned in the background for crypto miners, password prompts and attempts to hijack the page, and the outside sites it loads from are listed on its page. With `SAFE_BROWSING_KEY` or `WEB_RISK_KEY` set, those sites are also checked against Google's malware and phishing lists. Findings go to Reports; miners and Google-listed sites are taken down straight away.
+
 ## Legal and moderation
 
 - `/terms` and `/privacy` are generated from `server/legal.js`, using `CONTACT_EMAIL`, `OPERATOR_NAME` and `LEGAL_COUNTRY`. They're a starting point, not legal advice.
@@ -115,6 +126,8 @@ docker run -p 8080:8080 -v snackbar-data:/data \
 | `GAMES_ORIGIN` | `http://localhost:8081` | Public URL games are served from — must differ from the site |
 | `DATA_DIR` | `./data` | Database, uploads, covers |
 | `ADMIN_USERNAMES` | | Comma-separated admin usernames (the first account is always admin) |
+| `SAFE_BROWSING_KEY` | | Optional. Checks every outside URL an upload uses against Google Safe Browsing (free, non-commercial use) |
+| `WEB_RISK_KEY` | | Optional. Same check via Google Cloud Web Risk (free up to 100k lookups a month, allowed for commercial sites) |
 | `CONTACT_EMAIL` | `hello@<your domain>` | Contact address shown in the Terms, Privacy Policy and takedown messages |
 | `OPERATOR_NAME` | | Who runs the site (your name or company), shown in the Terms and Privacy Policy |
 | `LEGAL_COUNTRY` | `Cyprus` | Governing law and data-protection authority named in the legal pages |

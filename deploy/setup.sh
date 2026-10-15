@@ -66,6 +66,8 @@ CONTACT_EMAIL=hello@$DOMAIN
 # OPERATOR_NAME=Your Name
 LEGAL_COUNTRY=Cyprus
 # GITHUB_TOKEN=   # optional: higher GitHub rate limits for repo imports
+# SAFE_BROWSING_KEY=   # optional: check uploads against Google's malware/phishing list (non-commercial)
+# WEB_RISK_KEY=        # optional: same, via Google Cloud Web Risk (fine once you run ads)
 EOF
   chmod 640 "$ENVF"; chgrp snackbar "$ENVF"
 else

@@ -184,7 +184,7 @@ export async function processUpload(opts) {
       root = collapseSingleFolder(tmp);          // GitHub wraps everything in owner-repo-sha/
       if (subdir) {
         root = path.resolve(root, subdir);
-        if (!root.startsWith(tmp) || !fs.existsSync(root)) throw new UploadError(`There's no "${subdir}" folder in that repo.`);
+        if (!(root + path.sep).startsWith(tmp + path.sep) || !fs.existsSync(root) || !fs.statSync(root).isDirectory()) throw new UploadError(`There's no "${subdir}" folder in that repo.`);
       }
       const files = walk(root);
       const isUnity = files.some(f => /\.loader\.js$/i.test(f) || /UnityLoader\.js$/.test(f));

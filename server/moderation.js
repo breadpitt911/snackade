@@ -71,7 +71,7 @@ export function resolveReport(id, action, admin) {
     }
     if (action === 'restore' && r.kind === 'game' && r.game_id) {
       run("UPDATE games SET status='live', taken_down=0, updated_at=? WHERE id=?", t, r.game_id);
-      return;
+      return close('dismissed', true);
     }
     if (action === 'delete-comment' && r.kind === 'comment') {
       const c = r.comment_id && one('SELECT game_id FROM comments WHERE id=?', r.comment_id);
