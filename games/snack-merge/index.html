@@ -138,6 +138,7 @@ function draw() {
     if (K.t - endAt > .6 && (K.button(W / 2 - 100, 370, 200, 58, 'Cook again', { key: 'Enter' }) || K.hit('Enter', 'Space'))) newGame();
   }
 }
+K.onQuit = () => { state = 'menu'; };
 K.run(update, draw);
 })();
 </script>

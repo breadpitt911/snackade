@@ -61,6 +61,7 @@ function update(dt) {
     if (K.hit(...c.l)) v.lane = Math.max(0, v.lane - 1);
     if (K.hit(...c.r)) v.lane = Math.min(LANES - 1, v.lane + 1);
     if (mode === 1) for (const t of K.taps()) v.lane = K.clamp(v.lane + (t.x < W / 2 ? -1 : 1), 0, LANES - 1);
+    else for (const t of K.taps()) if (t.x >= v.x0 && t.x < v.x0 + v.w) v.lane = K.clamp(v.lane + (t.x < v.x0 + v.w / 2 ? -1 : 1), 0, LANES - 1);
     const tx = laneX(v, v.lane), px = v.x;
     v.x = K.lerp(v.x, tx, Math.min(1, dt * 14)); v.tilt = (v.x - px) / dt / 900;
   }
@@ -148,7 +149,7 @@ function draw() {
       K.text('Player 1', W / 2 - 150, 290, 15, C.lemon); K.keycap(W / 2 - 168, 322, 'A'); K.keycap(W / 2 - 132, 322, 'D');
       K.text('Player 2', W / 2 + 150, 290, 15, C.mint); K.keycap(W / 2 + 132, 322, '←'); K.keycap(W / 2 + 168, 322, '→');
       K.text('Two players get a road each and the exact same traffic. Last one driving wins.', W / 2, 372, 14, 'rgba(255,244,224,.8)', 'center', 600, false);
-    } else K.text('Tap left or right to change lanes', W / 2, 310, 16, C.cream, 'center', 700);
+    } else { K.text('Tap left or right to change lanes', W / 2, 300, 16, C.cream, 'center', 700); K.text('Two players: tap on your own road', W / 2, 330, 15, C.lemon, 'center', 700); }
     const b = K.best('lanes'); if (b) K.text(`Best ${b.toLocaleString()}`, W / 2, 410, 14, C.lemon, 'center', 700, false);
     return;
   }
@@ -175,6 +176,7 @@ function draw() {
   }
 }
 let menuRows = false;
+K.onQuit = () => { state = 'menu'; menuRows = false; };
 K.run(update, draw);
 })();
 </script>

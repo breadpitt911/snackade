@@ -76,7 +76,7 @@ function update(dt) {
       continue;
     }
     let ix = 0, iy = 0;
-    if (K.touch && p.i === 0 && mode === 1) { const s = K.stick({ x: 0, y: 0, w: W, h: H }, 50); if (s) { ix = s.dx; iy = s.dy; } }
+    if (K.touch) { const s = K.stick(mode === 1 ? { x: 0, y: 0, w: W, h: H } : p.i ? K.RIGHT : K.LEFT, 50); if (s) { ix = s.dx; iy = s.dy; } }
     else { const c = ctl[p.i]; ix = (K.key(...c.r) ? 1 : 0) - (K.key(...c.l) ? 1 : 0); iy = (K.key(...c.d) ? 1 : 0) - (K.key(...c.u) ? 1 : 0); const m = Math.hypot(ix, iy); if (m > 1) { ix /= m; iy /= m; } }
     p.x += ix * 230 * dt; p.y += iy * 230 * dt; p.r = 15; collideRocks(p);
     if (ix || iy) p.walk += dt * 12;
@@ -170,7 +170,7 @@ function draw() {
     K.text('The gummies have gone rogue. Hold the kitchen.', W / 2, 140, 18, C.lemon, 'center', 700);
     if (K.button(W / 2 - 220, 172, 200, 60, '1 Player', { key: '1' }) || K.hit('Digit1')) newGame(1);
     if (K.button(W / 2 + 20, 172, 200, 60, '2 Players co-op', { key: '2', bg: C.sky, size: 18 }) || K.hit('Digit2')) newGame(2);
-    K.text(K.touch ? 'Drag to move. Your spoon aims and fires on its own.' : 'P1: W A S D · P2: arrow keys · aiming and firing are automatic', W / 2, 262, 14, C.cream, 'center', 700, false);
+    K.text(K.touch ? 'Drag to move, your spoon aims and fires on its own. Co-op: one half of the screen each.' : 'P1: W A S D · P2: arrow keys · aiming and firing are automatic', W / 2, 262, 14, C.cream, 'center', 700, false);
     return;
   }
   for (const d of drops) { if (d.t > 7 && Math.floor(K.t * 8) % 2) continue; K.circle(d.x, d.y, 17, 'rgba(255,244,224,.12)'); K.snack(d.kind, d.x, d.y + Math.sin(d.t * 4) * 2, 11); }
@@ -193,6 +193,7 @@ function draw() {
     }
   }
 }
+K.onQuit = () => { state = 'menu'; };
 K.run(update, draw);
 })();
 </script>

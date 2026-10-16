@@ -89,6 +89,10 @@ function controls(car) {
     }
     return { gas: (K.key('KeyW') || (solo && K.key('ArrowUp')) ? 1 : 0) - (K.key('KeyS') || (solo && K.key('ArrowDown')) ? 1 : 0), steer: (K.key('KeyD') || (solo && K.key('ArrowRight')) ? 1 : 0) - (K.key('KeyA') || (solo && K.key('ArrowLeft')) ? 1 : 0) };
   }
+  if (car.human && K.touch) {   // two players on one phone
+    const x0 = car.human === 1 ? 0 : W - 260;
+    return { gas: 1, steer: (K.held({ x: x0 + 130, y: H - 150, w: 130, h: 150 }) ? 1 : 0) - (K.held({ x: x0, y: H - 150, w: 130, h: 150 }) ? 1 : 0) };
+  }
   if (car.human === 2) return { gas: (K.key('ArrowUp') ? 1 : 0) - (K.key('ArrowDown') ? 1 : 0), steer: (K.key('ArrowRight') ? 1 : 0) - (K.key('ArrowLeft') ? 1 : 0) };
   // CPU driver: aim at a point down the track, ease off before tight corners
   const sp = Math.hypot(car.vx, car.vy);
@@ -202,7 +206,7 @@ function draw() {
       K.text('Player 1', W / 2 - 150, 336, 15, C.lemon); ['W', 'A', 'S', 'D'].forEach((k, i) => K.keycap(W / 2 - 201 + i * 34, 368, k));
       K.text('Player 2', W / 2 + 150, 336, 15, C.mint); ['↑', '←', '↓', '→'].forEach((k, i) => K.keycap(W / 2 + 99 + i * 34, 368, k));
       K.text('Up = gas, down = brake. Solo racers can use arrows too.', W / 2, 410, 14, 'rgba(255,244,224,.75)', 'center', 600, false);
-    } else K.text('Gas is automatic. Thumbs on the arrows, tap brake for corners.', W / 2, 360, 15, C.cream, 'center', 700);
+    } else { K.text('Gas is automatic. Thumbs on the arrows, tap brake for corners.', W / 2, 346, 15, C.cream, 'center', 700); K.text('Two players: steering arrows on each side, no brakes', W / 2, 372, 14, C.lemon, 'center', 700); }
     return;
   }
   ctx.drawImage(trackCv, 0, 0); ctx.drawImage(marks, 0, 0);
@@ -218,9 +222,11 @@ function draw() {
     K.text(c.done ? 'Finished!' : `Lap ${Math.min(LAPS, c.lap + 1)}/${LAPS}`, x, 22, 17, c.color, al, 800, false);
     K.text(`${ordinal(order.indexOf(c) + 1)} · ${fmtT(c.done ? c.time : raceT)}`, x, 44, 15, C.cream, al, 700, false);
   });
-  if (K.touch && mode === 1 && state === 'race') {
+  if (K.touch && state === 'race') {
     ctx.globalAlpha = .55;
-    K.button(14, H - 80, 100, 66, '◀', { bg: C.cream, size: 30 }); K.button(130, H - 80, 100, 66, '▶', { bg: C.cream, size: 30 }); K.button(W - 124, H - 80, 110, 66, 'Brake', { bg: C.tomato, size: 20 });
+    K.button(14, H - 80, 100, 66, '◀', { bg: mode === 2 ? C.lemon : C.cream, size: 30 }); K.button(130, H - 80, 100, 66, '▶', { bg: mode === 2 ? C.lemon : C.cream, size: 30 });
+    if (mode === 1) K.button(W - 124, H - 80, 110, 66, 'Brake', { bg: C.tomato, size: 20 });
+    else { K.button(W - 246, H - 80, 100, 66, '◀', { bg: C.mint, size: 30 }); K.button(W - 114, H - 80, 100, 66, '▶', { bg: C.mint, size: 30 }); }
     ctx.globalAlpha = 1;
   }
   if (state === 'race' && countdown > 0) {
@@ -246,6 +252,7 @@ function draw() {
   }
 }
 let menuTrack = -1;
+K.onQuit = () => { state = 'menu'; };
 K.run(update, draw);
 })();
 </script>

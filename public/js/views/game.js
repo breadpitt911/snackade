@@ -20,6 +20,9 @@ export async function render(root, [slug]) {
           <button class="poster" id="poster" aria-label="Play ${esc(g.title)}">${coverHtml(g)}
             <span class="go"><span class="disc">${icon('play')}</span><b>Play ${esc(g.title)}</b></span></button>
         </div>
+        <button class="imm-exit" id="imm-exit" type="button" aria-label="Leave full screen">${icon('close')}</button>
+        <div class="rotate" id="rotate" hidden><span class="phone" aria-hidden="true"></span>
+          <b id="rotate-t"></b><p>It fits the screen better that way.</p><button class="btn small lemon" id="rotate-ok" type="button">Play anyway</button></div>
         <div class="player-bar">
           <button class="btn small" id="like" aria-pressed="${d.liked}">${icon(d.liked ? 'heartFill' : 'heart')}<span id="like-n" class="num">${fmt(g.likes)}</span></button>
           <span class="muted num" style="display:inline-flex;gap:4px;align-items:center">${icon('plays', 16)}<span id="plays-n">${fmt(g.plays)}</span> <span id="plays-w">${g.plays === 1 ? 'play' : 'plays'}</span></span>
@@ -75,14 +78,55 @@ export async function render(root, [slug]) {
       if (state.me && d.rating.blocker === 'play') { d.rating.blocker = null; renderRating(); }
     }).catch(() => {});
   }
-  root.querySelector('#poster').addEventListener('click', start);
-  root.querySelector('#restart').addEventListener('click', () => { if (iframe) { iframe.src = g.playUrl; iframe.focus(); } });
-  root.querySelector('#fs').addEventListener('click', () => {
+  // ---------- full screen / immersive ----------
+  // Real fullscreen where the browser allows it (desktop, Android, iPad); on iPhone, which has no
+  // fullscreen API for pages, the player simply covers the whole screen instead.
+  const phone = matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
+  const wantLandscape = aw > ah, wantPortrait = aw < ah;
+  const rotateEl = root.querySelector('#rotate');
+  let immersive = false, rotateDismissed = false;
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  function checkRotate() {
+    const landscape = innerWidth > innerHeight;
+    const wrong = immersive && phone && !rotateDismissed && ((wantLandscape && !landscape) || (wantPortrait && landscape));
+    rotateEl.hidden = !wrong;
+    if (wrong) root.querySelector('#rotate-t').textContent = wantLandscape ? 'Turn your phone sideways' : 'Turn your phone upright';
+  }
+  function enterImmersive() {
     start();
-    const el = stage;
-    (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
-    setTimeout(() => iframe?.focus(), 100);
-  });
+    if (immersive) return;
+    immersive = true;
+    player.classList.add('immersive'); document.documentElement.classList.add('immersive-on');
+    const req = player.requestFullscreen || player.webkitRequestFullscreen;
+    if (req) {
+      try {
+        Promise.resolve(req.call(player, { navigationUI: 'hide' }))
+          .then(() => { if (phone && (wantLandscape || wantPortrait)) screen.orientation?.lock?.(wantLandscape ? 'landscape' : 'portrait').catch(() => {}); })
+          .catch(() => {});
+      } catch { /* the overlay still works */ }
+    } else if (phone) {
+      try { if (!localStorage.getItem('snk-a2hs')) { localStorage.setItem('snk-a2hs', '1'); toast('Tip: add Snackbar to your Home Screen (Share → Add to Home Screen) and games get the whole screen, no browser bars.', { pip: '📱', ms: 7000 }); } } catch { /* private mode */ }
+    }
+    checkRotate();
+    setTimeout(() => iframe?.focus(), 150);
+  }
+  function exitImmersive() {
+    if (!immersive) return;
+    immersive = false;
+    player.classList.remove('immersive'); document.documentElement.classList.remove('immersive-on');
+    try { screen.orientation?.unlock?.(); } catch { /* not supported */ }
+    if (fsEl()) Promise.resolve((document.exitFullscreen || document.webkitExitFullscreen).call(document)).catch(() => {});
+    rotateEl.hidden = true;
+  }
+  const onFs = () => { if (!fsEl() && immersive) exitImmersive(); };
+  document.addEventListener('fullscreenchange', onFs); document.addEventListener('webkitfullscreenchange', onFs);
+  addEventListener('resize', checkRotate);
+  root.querySelector('#imm-exit').addEventListener('click', exitImmersive);
+  root.querySelector('#rotate-ok').addEventListener('click', () => { rotateDismissed = true; checkRotate(); iframe?.focus(); });
+  // On a phone, Play goes straight to full screen: a game squeezed into the page is too small to play.
+  root.querySelector('#poster').addEventListener('click', () => phone ? enterImmersive() : start());
+  root.querySelector('#restart').addEventListener('click', () => { if (iframe) { iframe.src = g.playUrl; iframe.focus(); } });
+  root.querySelector('#fs').addEventListener('click', enterImmersive);
   root.querySelector('#theatre').addEventListener('click', e => {
     const on = !player.classList.contains('theatre');
     player.classList.toggle('theatre', on);
@@ -207,7 +251,11 @@ export async function render(root, [slug]) {
     } catch (err) { toastError(err.message); btn.disabled = false; }
   });
 
-  return () => { removeEventListener('message', onMessage); document.removeEventListener('visibilitychange', onVis); };
+  return () => {
+    exitImmersive();
+    removeEventListener('message', onMessage); removeEventListener('resize', checkRotate);
+    document.removeEventListener('visibilitychange', onVis); document.removeEventListener('fullscreenchange', onFs); document.removeEventListener('webkitfullscreenchange', onFs);
+  };
 }
 
 function ratingHtml(r, g) {

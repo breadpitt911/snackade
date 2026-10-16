@@ -137,4 +137,42 @@ export const MORE_COVERS = {
     ${gummy(60, 60, 2, 'rgba(255,90,54,.9)')}${gummy(260, 70, 2.2, 'rgba(46,230,193,.9)')}${gummy(70, 190, 1.8, 'rgba(142,108,240,.9)')}${gummy(270, 190, 2.6, 'rgba(255,201,60,.9)')}
     <g fill="#ffc93c" stroke="${INK}" stroke-width="1.5"><circle cx="196" cy="94" r="5"/><circle cx="216" cy="84" r="5"/><circle cx="112" cy="160" r="5"/></g>
     <g transform="translate(160 128) scale(2.3)"><circle r="15" fill="#ffc93c" stroke="${INK}" stroke-width="2.5"/><rect x="-9" y="-22" width="18" height="9" rx="3" fill="#fff" stroke="${INK}" stroke-width="2"/><circle cx="-5" cy="-24" r="6" fill="#fff" stroke="${INK}" stroke-width="2"/><circle cx="5" cy="-24" r="6" fill="#fff" stroke="${INK}" stroke-width="2"/><circle cy="-28" r="6" fill="#fff" stroke="${INK}" stroke-width="2"/><rect x="-8" y="-21" width="16" height="7" fill="#fff"/><circle cx="-1" cy="-1" r="2.4" fill="${INK}"/><circle cx="7" cy="-2" r="2.4" fill="${INK}"/><path d="M10-6l14-8" stroke="#cfd3e0" stroke-width="4" stroke-linecap="round"/></g>`, '#2b2440'),
+  'night-shift': () => svg('Night Shift', `
+    <defs><radialGradient id="nsb" cx="0.1" cy="0.95" r="1"><stop offset="0" stop-color="#ffd68c" stop-opacity=".75"/><stop offset=".6" stop-color="#ffd68c" stop-opacity=".18"/><stop offset="1" stop-color="#ffd68c" stop-opacity="0"/></radialGradient></defs>
+    <g fill="#1c1a24"><rect x="20" y="40" width="46" height="150"/><rect x="250" y="20" width="52" height="170"/></g>
+    <path d="M58 214L330 70V250H120z" fill="url(#nsb)"/>
+    <g fill="#3a3546"><rect x="150" y="70" width="70" height="110"/></g><g fill="#8a6a3a"><rect x="158" y="84" width="22" height="16"/><rect x="186" y="110" width="26" height="16"/><rect x="160" y="140" width="20" height="16"/></g>
+    <g transform="translate(262 116)"><path d="M-26 50Q-34-40 0-46Q34-40 26 50l-8-10-8 10-10-10-10 10-8-10z" fill="#05040a"/><circle cx="-10" cy="-18" r="6" fill="#ff3b3b"/><circle cx="10" cy="-18" r="6" fill="#ff3b3b"/><path d="M-16-2l4 8 4-8 4 8 4-8 4 8 4-8 4 8" fill="none" stroke="#e9e2d0" stroke-width="3" stroke-linejoin="round"/></g>
+    <g transform="translate(62 208)"><circle r="13" fill="#ffc93c" stroke="#000" stroke-width="3"/><rect x="-13" y="-5" width="26" height="5" fill="#4fc3f7"/><rect x="8" y="-14" width="14" height="8" rx="2" fill="#cfd3e0" stroke="#000" stroke-width="2" transform="rotate(-28)"/></g>`, '#050409'),
+
+  'candle-call': () => svg('Candle Call', `
+    <ellipse cx="160" cy="70" rx="58" ry="66" fill="#d8d0ff" opacity=".14"/><ellipse cx="140" cy="60" rx="10" ry="15" fill="#0d0716" opacity=".5"/><ellipse cx="180" cy="60" rx="10" ry="15" fill="#0d0716" opacity=".5"/>
+    <ellipse cx="160" cy="176" rx="150" ry="62" fill="#3b2018" stroke="#5a3324" stroke-width="4"/>
+    <rect x="102" y="152" width="116" height="50" rx="12" fill="#c9a66b" stroke="#6b4a2b" stroke-width="3"/>
+    <text x="160" y="182" text-anchor="middle" font-family="Bricolage Grotesque, sans-serif" font-weight="700" font-size="12" fill="rgba(59,32,24,.75)">A B C D E F G H</text>
+    ${[[52, 150, '#ffb347'], [100, 118, '#ff6b9d'], [220, 118, '#9d7bff'], [268, 150, '#4fc3f7'], [90, 222, '#7cffb2'], [230, 222, '#ffe66b']].map(([x, y, c]) => `<circle cx="${x}" cy="${y - 34}" r="26" fill="${c}" opacity=".28"/><rect x="${x - 9}" y="${y - 24}" width="18" height="30" rx="4" fill="#efe6d2" stroke="${INK}" stroke-width="2.5"/><path d="M${x} ${y - 26}q-7-8 0-22q7 14 0 22z" fill="${c}"/><ellipse cx="${x}" cy="${y - 30}" rx="2.5" ry="4" fill="#fff8e0"/>`).join('')}`, '#0d0716'),
+
+  'snack-shack': () => svg('Snack Shack', `
+    <rect width="320" height="130" fill="#bfe8ff"/><rect y="110" width="320" height="30" fill="#9ad4a0"/>
+    ${Array.from({ length: 8 }, (_, i) => `<path d="M${i * 40} 0h40v18q-20 18-40 0z" fill="${i % 2 ? '#fff4e0' : '#ff5a36'}"/>`).join('')}
+    <g transform="translate(110 92)"><path d="M-30 50Q-34-10 0-12Q34-10 30 50z" fill="#2ee6c1" stroke="${INK}" stroke-width="3"/><circle cx="-9" cy="8" r="5" fill="#fff" stroke="${INK}" stroke-width="2"/><circle cx="9" cy="8" r="5" fill="#fff" stroke="${INK}" stroke-width="2"/><circle cx="-8" cy="9" r="2.2" fill="${INK}"/><circle cx="10" cy="9" r="2.2" fill="${INK}"/><path d="M-6 22a6 6 0 0 0 12 0" fill="none" stroke="${INK}" stroke-width="2.5"/></g>
+    <g transform="translate(180 30)"><rect x="0" y="0" width="96" height="48" rx="12" fill="#fff" stroke="${INK}" stroke-width="3"/><path d="M14 48l-6 12 16-12z" fill="#fff" stroke="${INK}" stroke-width="3"/>
+      <g transform="translate(30 24)"><path d="M-14 0q0-12 14-12t14 12z" fill="#f0a245" stroke="${INK}" stroke-width="2"/><rect x="-15" y="0" width="30" height="5" fill="#6b3a22"/><rect x="-14" y="5" width="28" height="6" rx="3" fill="#f0a245" stroke="${INK}" stroke-width="2"/></g>
+      <g transform="translate(68 24)"><circle r="13" fill="#d99a55" stroke="${INK}" stroke-width="2"/><circle r="11" fill="#ff7eb6"/><circle r="4" fill="#2a2142" stroke="${INK}" stroke-width="2"/></g></g>
+    <rect y="140" width="320" height="22" fill="#c97b3f"/><rect y="140" width="320" height="6" fill="#e9a95c"/>
+    <rect y="162" width="320" height="78" fill="#2a2140"/>
+    <rect x="22" y="176" width="130" height="56" rx="10" fill="#4a4658" stroke="${INK}" stroke-width="3"/><circle cx="60" cy="204" r="18" fill="rgba(0,0,0,.35)" stroke="${INK}" stroke-width="2"/><circle cx="114" cy="204" r="18" fill="rgba(0,0,0,.35)" stroke="${INK}" stroke-width="2"/>
+    <g transform="translate(60 204) scale(.8)"><path d="M-14 0q0-12 14-12t14 12z" fill="#f0a245"/><rect x="-15" y="0" width="30" height="5" fill="#6b3a22"/></g>
+    <path d="M114 186a18 18 0 0 1 18 18" fill="none" stroke="#2ee6c1" stroke-width="5"/>
+    <rect x="168" y="176" width="130" height="56" rx="10" fill="#ff9ccf" stroke="${INK}" stroke-width="3"/><g transform="translate(233 204)"><circle r="16" fill="#d99a55" stroke="${INK}" stroke-width="2.5"/><circle r="13" fill="#ff7eb6"/><circle r="5" fill="#2a2142" stroke="${INK}" stroke-width="2"/></g>`, '#bfe8ff'),
+
+  'sprout-patch': () => svg('Sprout Patch', `
+    <g fill="#86cf80">${Array.from({ length: 24 }, (_, i) => `<rect x="${(i % 6) * 60 + (Math.floor(i / 6) % 2) * 30}" y="${Math.floor(i / 6) * 60}" width="30" height="30"/>`).join('')}</g>
+    <rect x="18" y="28" width="284" height="196" rx="18" fill="#5b3a20"/>
+    ${[[28, 38, .9], [124, 38, .5], [220, 38, .2], [28, 134, .3], [124, 134, .8], [220, 134, .6]].map(([x, y, w]) => `<rect x="${x}" y="${y}" width="86" height="80" rx="10" fill="rgb(${150 - w * 60},${100 - w * 40},${60 - w * 25})" stroke="${INK}" stroke-width="2.5"/>`).join('')}
+    <g transform="translate(71 80)"><path d="M0 0l-10-20M0 0l0-24M0 0l10-20" stroke="#3e8e2a" stroke-width="5" stroke-linecap="round"/><path d="M-10 0h20l-10 22z" fill="#ff8a2a" stroke="${INK}" stroke-width="2"/></g>
+    <g transform="translate(167 182)"><path d="M-26 6q26-30 52 0" fill="none" stroke="#3e8e2a" stroke-width="4"/><ellipse cy="6" rx="24" ry="19" fill="#f28c28" stroke="${INK}" stroke-width="2.5"/><path d="M0-13v38M-12-11q-6 17 0 34M12-11q6 17 0 34" stroke="rgba(21,19,31,.35)" stroke-width="2" fill="none"/><rect x="-2" y="-20" width="4" height="8" fill="#5b3420"/></g>
+    <g transform="translate(263 176)">${[[-12, -6], [12, -6], [0, -16], [-6, 4], [8, 4]].map(([x, y]) => `<ellipse cx="${x}" cy="${y}" rx="11" ry="7" fill="#4caf50"/>`).join('')}${[[-10, 2], [8, -2], [0, 9]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="7" fill="#ef3b3b" stroke="${INK}" stroke-width="1.5"/>`).join('')}</g>
+    <g transform="translate(176 66)"><ellipse rx="16" ry="11" fill="#1b1530"/><path d="M-4-2l-20-12 18 18M4-2l20-12-18 18" fill="#1b1530"/><circle cx="12" cy="-8" r="7" fill="#1b1530"/><circle cx="14" cy="-9" r="2" fill="#fff"/><path d="M18-8l9 3-9 3z" fill="#ffc93c"/></g>
+    <g fill="#7bd94a"><circle cx="252" cy="88" r="5"/><circle cx="260" cy="84" r="5"/><path d="M256 96v-10" stroke="#3e8e2a" stroke-width="3"/></g>`, '#7cc576'),
 };

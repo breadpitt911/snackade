@@ -79,8 +79,8 @@ function update(dt) {
     const c = ctl[s.i];
     const ix = (K.key(...c.r) ? 1 : 0) - (K.key(...c.l) ? 1 : 0), iy = (K.key(...c.d) ? 1 : 0) - (K.key(...c.u) ? 1 : 0);
     s.x += ix * 310 * dt; s.y += iy * 310 * dt; s.tilt = K.lerp(s.tilt, ix * .35, dt * 10);
-    if (s.i === 0 && mode === 1) {
-      const p = K.pointers()[0];
+    if (s.i === 0 || K.touch) {
+      const p = mode === 1 ? K.pointers()[0] : K.pointers().find(q => (q.x0 < W / 2) === (s.i === 0));
       if (p) { if (s.dragX === null) { s.dragX = s.x - p.x; s.dragY = s.y - p.y; } const tx = p.x + s.dragX, ty = p.y + s.dragY; s.tilt = K.lerp(s.tilt, K.clamp((tx - s.x) / 30, -.4, .4), dt * 10); s.x = tx; s.y = ty; }
       else s.dragX = null;
     }
@@ -204,7 +204,7 @@ function draw() {
     if (!K.touch) {
       K.text('P1: W A S D   ·   P2: arrow keys', W / 2, 548, 15, C.cream, 'center', 700, false);
       K.text('Your guns fire on their own. Solo? Arrows work too.', W / 2, 574, 13, 'rgba(255,244,224,.7)', 'center', 600, false);
-    } else K.text('Drag anywhere to fly. Guns fire on their own.', W / 2, 560, 15, C.cream, 'center', 700);
+    } else { K.text('Drag anywhere to fly. Guns fire on their own.', W / 2, 548, 15, C.cream, 'center', 700); K.text('Co-op: each pilot drags on their own half', W / 2, 574, 13, C.lemon, 'center', 700); }
     K.snack('chili', 120, 612, 10); K.text('power', 150, 612, 12, C.cream, 'left', 700, false);
     K.snack('donut', 230, 612, 10); K.text('shield', 252, 612, 12, C.cream, 'left', 700, false);
     K.snack('cherry', 340, 612, 10); K.text('+1 life', 360, 612, 12, C.cream, 'left', 700, false);
@@ -232,6 +232,7 @@ function draw() {
     }
   }
 }
+K.onQuit = () => { state = 'menu'; };
 K.run(update, draw);
 })();
 </script>

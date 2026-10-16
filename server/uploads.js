@@ -11,7 +11,7 @@ import { one } from './db.js';
 export class UploadError extends Error { constructor(msg) { super(msg); this.status = 400; } }
 
 export const KINDS = ['html5', 'html', 'github', 'unity', 'embed'];
-export const CATEGORIES = ['arcade', 'action', 'shooter', 'puzzle', 'racing', 'sports', 'platformer', 'strategy', 'casual', 'multiplayer'];
+export const CATEGORIES = ['arcade', 'action', 'shooter', 'puzzle', 'racing', 'sports', 'platformer', 'strategy', 'casual', 'horror', 'simulation', 'multiplayer'];
 
 export function slugify(s) {
   return s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')

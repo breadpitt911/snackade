@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en"<!--THEME-->>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -11,14 +11,16 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="preload" href="/fonts/bricolage-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/css/app.css">
+<noscript><style>.ssr{visibility:visible;height:auto;overflow:visible;animation:none}.boot-sk{display:none}</style></noscript>
 <link rel="modulepreload" href="/js/core.js">
 <script type="module" src="/js/app.js"></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
-<header class="topbar" id="topbar"></header>
+<header class="topbar" id="topbar"><!--TOPBAR--></header>
 <main id="main" tabindex="-1"><!--SSR--></main>
-<footer class="foot" id="foot"></footer>
+<footer class="foot" id="foot"><!--FOOT--></footer>
+<script type="application/json" id="boot-meta"><!--META--></script>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <div id="modal-root"></div>
 </body>

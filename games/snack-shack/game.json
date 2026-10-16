@@ -1,0 +1,17 @@
+{
+  "title": "Snack Shack",
+  "description": "Run a tiny food stand one day at a time. Get burgers on the grill, pull donuts from the case, and keep the queue happy before they walk off. Orders go out the moment everything's on the counter. New snacks join the menu as the days go on, rent goes up, and upgrades between days keep you in business.",
+  "instructions": "Click or tap a station to start cooking, then again when it's ready. Keyboard: 1 to 5. Tap a snack on the counter to bin it.",
+  "category": "simulation",
+  "tags": [
+    "cooking",
+    "management",
+    "time",
+    "upgrades"
+  ],
+  "aspect": "16:9",
+  "accent": "#ff5a36",
+  "seed": 160,
+  "featured": false,
+  "order": 23
+}

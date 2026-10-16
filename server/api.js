@@ -10,6 +10,7 @@ import { CATEGORY_INFO, clearSitemapCache } from './seo.js';
 import { ratingSummary, rateBlocker, rate, listComments, addComment, deleteComment, cleanBody, COMMENT_MAX, RATING_LABELS, MONTH_RULES, standings, pastWinners, monthOf, monthRange } from './community.js';
 import { REPORT_REASONS, DETAILS_MAX, ReportError, createReport, listReports, resolveReport, openReportCount, exportData, deleteAccount } from './moderation.js';
 import { admin } from './admin.js';
+import { metaPayload } from './meta.js';
 import { checkGame } from './scan.js';
 import { legalPage, MIN_AGE, contactEmail } from './legal.js';
 import { processUpload, uniqueSlug, removeGameFiles, CATEGORIES, KINDS, UploadError } from './uploads.js';
@@ -62,14 +63,7 @@ function meResponse(u, events = []) {
 }
 
 // ---------- meta ----------
-api.get('/meta', (_req, res) => res.json({
-  siteName: config.siteName, gamesOrigin: config.gamesOrigin, categories: CATEGORIES,
-  categoryIntro: Object.fromEntries(CATEGORIES.map(c => [c, CATEGORY_INFO[c].intro])), categoryNoun: Object.fromEntries(CATEGORIES.map(c => [c, CATEGORY_INFO[c].noun])), kinds: KINDS,
-  rules: RULES, levels: LEVELS, badges: BADGES.map(({ check, ...b }) => b),
-  ratingLabels: RATING_LABELS, commentMax: COMMENT_MAX, monthRules: MONTH_RULES,
-  reportReasons: REPORT_REASONS, reportDetailsMax: DETAILS_MAX, minAge: MIN_AGE, contactEmail: contactEmail(),
-  limits: { zipMB: config.limits.zip / 1048576, htmlMB: config.limits.htmlFile / 1048576 },
-}));
+api.get('/meta', (_req, res) => res.json(metaPayload()));
 
 // ---------- auth ----------
 api.get('/me', (req, res) => {
@@ -142,12 +136,25 @@ api.get('/home', (_req, res) => {
     fresh: listGames('', 'g.created_at DESC', 12),
     community: listGames('g.author_id IS NOT NULL', 'g.created_at DESC', 12),
     loved: listGames('g.likes > 0', 'g.likes DESC', 8),
+    // Eight games for the vending machine on the home page: featured first, then the most
+    // played, one per category so the glass shows the range before it repeats a category.
+    machine: (() => {
+      const pool = listGames('', 'g.featured DESC, g.plays DESC, g.created_at ASC', 60), seen = new Set(), out = [];
+      for (const g of pool) if (!seen.has(g.category) && out.length < 8) { seen.add(g.category); out.push(g); }
+      for (const g of pool) if (out.length < 8 && !out.includes(g)) out.push(g);
+      return out;
+    })(),
     duos: listGames("(',' || g.tags || ',') LIKE '%,2-player,%'", 'g.featured DESC, g.plays DESC, g.created_at ASC', 12),
     categories: counts,
     gotm: (() => { const m = pastWinners(1)[0]; const w = m?.winners.find(x => x.place === 1 && x.status === 'live'); return w ? { month: m.month, game: awardGame(w), avg: w.avg, votes: w.votes } : null; })(),
     race: standings(monthOf(Date.now()), 3).filter(r => r.eligible).map(r => ({ game: awardGame(r), avg: r.avg, votes: r.votes })),
     stats: one("SELECT (SELECT COUNT(*) FROM games WHERE status='live') games, (SELECT COUNT(*) FROM users) players, (SELECT COALESCE(SUM(plays),0) FROM games) plays"),
   });
+});
+
+api.get('/random', (_req, res) => {
+  const g = one(`${GAME_SELECT} WHERE g.status='live' ORDER BY RANDOM() LIMIT 1`);
+  res.json({ game: g ? publicGame(g) : null });
 });
 
 api.get('/games', (req, res) => {

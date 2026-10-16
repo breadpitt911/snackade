@@ -72,6 +72,9 @@ function update(dt) {
       const s = K.stick({ x: 0, y: 0, w: W / 2, h: H }, 55);
       if (s) steer(a, s.dx, s.dy, dt);
       if (K.tappedIn({ x: W / 2, y: 0, w: W / 2, h: H })) dash(a);
+    } else if (K.touch) {
+      const s = K.stick(K.LEFT, 55); if (s) steer(a, s.dx, s.dy, dt);
+      if (K.quickTap(K.LEFT)) dash(a);
     } else {
       const solo = mode === 1;
       const ix = (K.key('KeyD') || (solo && K.key('ArrowRight')) ? 1 : 0) - (K.key('KeyA') || (solo && K.key('ArrowLeft')) ? 1 : 0);
@@ -84,6 +87,7 @@ function update(dt) {
     if (mode === 2) {
       steer(b, (K.key('ArrowRight') ? 1 : 0) - (K.key('ArrowLeft') ? 1 : 0), (K.key('ArrowDown') ? 1 : 0) - (K.key('ArrowUp') ? 1 : 0), dt);
       if (K.hit('Enter', 'Slash', 'Period', 'ShiftRight')) dash(b);
+      if (K.touch) { const s2 = K.stick(K.RIGHT, 55); if (s2) steer(b, s2.dx, s2.dy, dt); if (K.quickTap(K.RIGHT)) dash(b); }
     } else cpu(b, a, dt);
   }
   // physics
@@ -193,7 +197,7 @@ function draw() {
       K.text('Player 2', W / 2 + 150, 290, 15, C.sky);
       ['↑', '←', '↓', '→'].forEach((k, i) => K.keycap(W / 2 + 80 + i * 34, 324, k)); K.keycap(W / 2 + 232, 324, 'Enter', 60);
       K.text('Space / Enter = dash. Chili = speed, donut = heavyweight. Best of 5.', W / 2, 374, 14, 'rgba(255,244,224,.75)', 'center', 600, false);
-    } else K.text('Left thumb moves, tap the right side to dash', W / 2, 314, 16, C.cream, 'center', 700);
+    } else { K.text('Solo: left thumb moves, tap the right side to dash', W / 2, 306, 16, C.cream, 'center', 700); K.text('Two players: one half of the screen each. Drag to move, tap to dash.', W / 2, 336, 15, C.lemon, 'center', 700); }
     return;
   }
   for (const s of snacks) K.snack(s.type, s.x, s.y + Math.sin(K.t * 4 + s.born) * 3, 13);
@@ -219,6 +223,7 @@ function draw() {
     }
   }
 }
+K.onQuit = () => { state = 'menu'; };
 K.run(update, draw);
 })();
 </script>

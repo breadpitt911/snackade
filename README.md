@@ -2,7 +2,7 @@
 
 Bite-sized browser games, with XP for playing *and* making them. A modern take on the old Miniclip idea: open a page, hit play, no installs.
 
-- **Twenty original games**, at least two in every category. Eleven have a **2-player mode on one keyboard** (or co-op), and most of those also play against a CPU:
+- **Twenty-four original games**, two or more in every category, all playable on phones (touch controls, full-screen play, a rotate prompt when the shape doesn't fit). Thirteen have a **2-player mode on one keyboard or one phone** (or co-op), and most of those also play against a CPU:
   - **Arcade:** Gobble Grid (maze chase), Brick Bash (breakout).
   - **Action:** Sumo Slam (2P), Snack Attack (2P co-op arena).
   - **Shooters:** Bunker Blitz (raycast FPS), Sky Swarm (2P co-op shmup).
@@ -12,6 +12,8 @@ Bite-sized browser games, with XP for playing *and* making them. A modern take o
   - **Platformers:** Jelly Jump, Bun Run.
   - **Strategy:** Four Up (2P, three CPU levels), Dot Boxes (2P).
   - **Casual:** Cave Hopper, Stack Snack.
+  - **Horror:** Night Shift (flashlight survival), Candle Call (séance memory, 2P).
+  - **Simulation:** Snack Shack (run a food stand), Sprout Patch (grow a garden).
   - **Multiplayer:** Tank Tussle, Light Trails.
 - **Uploads in five formats** — zipped HTML5 builds, single `.html` files, GitHub repos, Unity WebGL builds and hosted URLs.
 - **XP, levels, badges and leaderboards** — earned for playing, scoring, liking, publishing, and when other people play or like your games. Every award is logged so real rewards can be added later.

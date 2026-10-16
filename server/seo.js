@@ -11,18 +11,11 @@ import { CATEGORIES } from './uploads.js';
 import { legalPage, LEGAL_UPDATED } from './legal.js';
 import { listComments, standings, pastWinners, monthOf, RATING_LABELS } from './community.js';
 
-export const CATEGORY_INFO = {
-  arcade: { name: 'Arcade', noun: 'arcade', intro: "Free arcade games you can play right in your browser. Quick rounds, high scores, one more go. No downloads, no installs." },
-  action: { name: 'Action', noun: 'action', intro: "Free action games in your browser. Fast, loud and over before you know it, so you'll hit restart anyway." },
-  shooter: { name: 'Shooters', noun: 'shooting', intro: "Free shooting games, from retro FPS runs to top-down blasters. They all run in your browser, no download needed." },
-  puzzle: { name: 'Puzzle', noun: 'puzzle', intro: "Free puzzle games to play online. Good for a five-minute break or a whole evening of \"just one more level\"." },
-  racing: { name: 'Racing', noun: 'racing', intro: "Free racing games you can play in your browser. Pick it up, floor it, chase your best lap." },
-  sports: { name: 'Sports', noun: 'sports', intro: "Free sports games online. Quick matches, simple controls and plenty of trash talk on the leaderboard." },
-  platformer: { name: 'Platformers', noun: 'platformer', intro: "Free platformer games in your browser. Jump, dodge, fall, try again. Classic stuff." },
-  strategy: { name: 'Strategy', noun: 'strategy', intro: "Free strategy games to play online. Slower burn, bigger brain, still no download." },
-  casual: { name: 'Casual', noun: 'casual', intro: "Free casual games for when you've got a few minutes. One-button stuff, chill stuff, easy to pick up." },
-  multiplayer: { name: 'Multiplayer', noun: 'multiplayer', intro: "Free multiplayer browser games. Send a friend the link and you're in." },
-};
+export { CATEGORY_INFO } from './categories.js';
+import { CATEGORY_INFO } from './categories.js';
+import { metaPayload } from './meta.js';
+import { logo, icon } from '../public/js/art.js';
+import { skeleton } from '../public/js/skeleton.js';
 
 const SITE = () => config.siteOrigin;
 const NAME = () => config.siteName;
@@ -216,6 +209,16 @@ function headTags(p) {
   ].filter(Boolean).join('\n');
 }
 
+// The header and footer as they look to a signed-out visitor; the app takes them over once it starts.
+const topbarHtml = () => `<div class="wrap">
+    <a class="logo" href="/" aria-label="${esc(NAME())} home">${logo()}<span>${esc(NAME())}</span></a>
+    <nav class="nav" aria-label="Main"><a href="/games">Games</a><a href="/hall-of-fame">Hall of Fame</a><a href="/leaderboard">Leaderboard</a></nav>
+    <form class="search" role="search" action="/games">${icon('search')}<input name="q" type="search" placeholder="Search games" aria-label="Search games"></form>
+    <div class="me"><a class="btn lemon small upload-btn" href="/upload">${icon('upload')}<span>Upload</span></a></div></div>`;
+const footHtml = () => `<div class="wrap">
+    <div style="display:flex;align-items:center;gap:10px">${logo(30)}<span>Games for when you've got five minutes. Or five hours.</span></div>
+    <nav aria-label="Footer"><a href="/games">Games</a><a href="/upload">Upload</a><a href="/hall-of-fame">Hall of Fame</a><a href="/leaderboard">Leaderboard</a><a href="/leaderboard#xp">How XP works</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a></nav></div>`;
+
 export function renderPage(req) {
   const url = new URL(req.originalUrl, 'http://x');
   let p = pageFor(url.pathname, url.searchParams);
@@ -225,9 +228,15 @@ export function renderPage(req) {
     p = { status, title: `Not found · ${NAME()}`, noindex: true, description: HOME_DESC,
       body: `<h1>Nothing on this shelf</h1><p>That page doesn't exist, or the game got pulled.</p><p><a href="/games">Find something to play</a></p>` };
   }
+  const theme = (/(?:^|;\s*)theme=(light|dark)/.exec(req.headers.cookie || '') || [])[1];
   const html = shell()
+    .replace('<!--THEME-->', theme ? ` data-theme="${theme}" data-theme-choice="${theme}"` : '')
     .replace('<!--SEO-->', () => headTags(p))   // function form: user text containing "$&" stays literal
-    .replace('<!--SSR-->', () => `<div class="wrap ssr" data-ssr>${p.body}</div>`);
+    .replace('<!--TOPBAR-->', topbarHtml)
+    .replace('<!--FOOT-->', footHtml)
+    .replace('<!--META-->', () => JSON.stringify(metaPayload()).replace(/</g, '\\u003c'))
+    // Skeleton for people with JavaScript, the plain version for crawlers and everyone else.
+    .replace('<!--SSR-->', () => `<div class="boot-sk" aria-hidden="true">${skeleton(url.pathname)}</div><div class="wrap ssr" data-ssr>${p.body}</div>`);
   return { status, html };
 }
 

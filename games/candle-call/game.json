@@ -1,0 +1,17 @@
+{
+  "title": "Candle Call",
+  "description": "Six candles, one spirit board, and something on the other side that wants to talk. The spirit lights the candles in order; you light them back the same way. Each round the chain gets longer. Three mistakes and it comes to the table. Two players can pass the phone and build the chain together until someone slips.",
+  "instructions": "Click or tap the candles, or press 1 to 6. Two players: repeat the whole chain, then add one candle of your own.",
+  "category": "horror",
+  "tags": [
+    "2-player",
+    "memory",
+    "seance",
+    "spooky"
+  ],
+  "aspect": "4:3",
+  "accent": "#9d7bff",
+  "seed": 149,
+  "featured": false,
+  "order": 22
+}

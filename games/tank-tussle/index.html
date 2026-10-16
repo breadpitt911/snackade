@@ -130,6 +130,15 @@ function touchControls(t, dt) {
   }
   if (K.held({ x: W / 2, y: 0, w: W / 2, h: H })) fire(t);
 }
+// Two players on one phone: each gets half the screen. Drag to drive, quick tap to fire.
+function touchHalf(t, zone, dt) {
+  const s = K.stick(zone, 60);
+  if (s && Math.hypot(s.dx, s.dy) > .2) {
+    const want = Math.atan2(s.dy, s.dx), d = K.angDiff(t.a, want);
+    drive(t, Math.abs(d) < 1.2 ? Math.hypot(s.dx, s.dy) : 0, K.clamp(d * 3, -1, 1), dt);
+  }
+  if (K.quickTap(zone)) fire(t);
+}
 function cpu(t, foe, dt) {
   if (!foe.alive) return;
   // dodge shells that are about to hit
@@ -170,8 +179,8 @@ function update(dt) {
   if (startIn > 0) { startIn -= dt; return; }
   const [a, b] = tanks;
   for (const t of tanks) { t.cd -= dt; t.recoil = Math.max(0, t.recoil - dt * 6); }
-  if (a.alive) { if (K.touch && mode === 1) touchControls(a, dt); else human(a, mode === 1 ? KEYS1_SOLO : KEYS1, dt); }
-  if (b.alive) { if (mode === 2) human(b, KEYS2, dt); else cpu(b, a, dt); }
+  if (a.alive) { if (K.touch && mode === 1) touchControls(a, dt); else { human(a, mode === 1 ? KEYS1_SOLO : KEYS1, dt); if (K.touch) touchHalf(a, K.LEFT, dt); } }
+  if (b.alive) { if (mode === 2) { human(b, KEYS2, dt); if (K.touch) touchHalf(b, K.RIGHT, dt); } else cpu(b, a, dt); }
   // tanks bump each other
   if (a.alive && b.alive) { const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy); if (d < TR * 2 && d > 0) { const p = (TR * 2 - d) / 2; a.x -= dx / d * p; a.y -= dy / d * p; b.x += dx / d * p; b.y += dy / d * p; pushOut(a); pushOut(b); } }
 
@@ -256,7 +265,7 @@ function draw() {
       K.text('Player 2', W / 2 + 150, 298, 15, C.mint);
       ['↑', '←', '↓', '→'].forEach((k, i) => K.keycap(W / 2 + 80 + i * 34, 332, k)); K.keycap(W / 2 + 232, 332, 'Enter', 60);
       K.text('Drive, turn, fire. Solo players can use either set.', W / 2, 380, 14, 'rgba(255,244,224,.7)', 'center', 600, false);
-    } else K.text('Left thumb drives, tap the right side to fire', W / 2, 320, 16, C.cream, 'center', 700);
+    } else { K.text('Solo: left thumb drives, hold the right side to fire', W / 2, 314, 16, C.cream, 'center', 700); K.text('Two players: one half of the screen each. Drag to drive, tap to fire.', W / 2, 344, 15, C.lemon, 'center', 700); }
     return;
   }
   drawWalls();
@@ -277,6 +286,7 @@ function draw() {
     }
   }
 }
+K.onQuit = () => { state = 'menu'; };
 K.run(update, draw);
 })();
 </script>

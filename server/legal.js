@@ -3,7 +3,7 @@
 // These are a solid starting point, not legal advice: have a lawyer look before you monetise.
 import { config } from './config.js';
 
-export const LEGAL_UPDATED = '2026-10-15';
+export const LEGAL_UPDATED = '2026-10-16';
 export const MIN_AGE = 16;
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -132,7 +132,7 @@ function privacy() {
 </ul>
 
 <h2 id="cookies">5. Cookies and storage</h2>
-<p>We set <b>one cookie</b>, <code>__Host-snk_session</code>, and only when you sign in. It keeps you logged in, lasts up to 30 days, and is strictly necessary, so it doesn't need a consent banner. Your theme choice (light or dark) is saved in your browser's local storage and never sent to us. No analytics, advertising or tracking cookies.</p>
+<p>We set at most <b>two cookies</b>. <code>__Host-snk_session</code> is set only when you sign in: it keeps you logged in and lasts up to 30 days. <code>theme</code> is set only if you pick light or dark mode, so pages open in the colours you chose; it lasts a year. Both exist only to do what you asked for, so neither needs a consent banner. No analytics, advertising or tracking cookies.</p>
 <p>Games run on ${f.playHost}. Some games save progress in your browser on that address. Games uploaded by players, especially hosted-link games, can load content from other servers, which then see your IP address. That's outside our control. Each game page shows where it comes from.</p>
 
 <h2 id="share">6. Who we share it with</h2>

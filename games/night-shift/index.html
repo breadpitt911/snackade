@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Night Shift</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#000}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 800, H: 450 }), { ctx, C } = K, W = 800, H = 450;
+const T = 25, COLS = 32, ROWS = 18, RANGE = 250, CONE = .5, FUSES = 5;
+// Warehouse layouts: '#' wall/shelf, 'B' fuse box, 'P' start. Fuses and batteries are scattered on floor tiles.
+const MAPS = [
+  ['################################',
+   '#P.....#..........#............#',
+   '#......#..........#............#',
+   '#..##..#..######..#..########..#',
+   '#..##.....#....#.....#......#..#',
+   '#..##.....#....#.....#......#..#',
+   '#..##..####....####..#..##..#..#',
+   '#......................##......#',
+   '#......................##......#',
+   '#####..######..###########..####',
+   '#.........#.................#..#',
+   '#.........#.................#..#',
+   '#..#####..#..#######..####..#..#',
+   '#..#...#.....#.....#..#.....#..#',
+   '#..#...#.....#.....#..#........#',
+   '#..#...#######.....#..#######..#',
+   '#.................B#...........#',
+   '################################'],
+  ['################################',
+   '#P.........#........#..........#',
+   '#..........#........#..........#',
+   '#..###..#..#..####..#..#####...#',
+   '#..#....#.....#..#.....#...#...#',
+   '#..#....#.....#..#.....#...#...#',
+   '#..#..######..#..#######...#...#',
+   '#..#.......................#...#',
+   '#..#########..####..########...#',
+   '#.......#.....#..#.......#.....#',
+   '#.......#.....#..#.......#.....#',
+   '#####...#..####..####....#..####',
+   '#.......#..........#.....#.....#',
+   '#..######..######..#..#######..#',
+   '#..........#.......#...........#',
+   '#..........#...B...#...........#',
+   '#..........#.......#...........#',
+   '################################'],
+];
+let state = 'menu', level = 0, grid, player, beast, fuses, batteries, box, carried, delivered, battery, score, endAt = 0, scareT = 0, msg = '', msgT = 0, flicker = 0, beatT = 0, lightsOn = 0, aim = 0, lastMouse = null;
+const dark = document.createElement('canvas'); dark.width = W; dark.height = H; const dc = dark.getContext('2d');
+
+const wall = (c, r) => c < 0 || r < 0 || c >= COLS || r >= ROWS || grid[r][c] === '#';
+const wallAt = (x, y) => wall(Math.floor(x / T), Math.floor(y / T));
+const centre = (c, r) => ({ x: c * T + T / 2, y: r * T + T / 2 });
+
+function newGame() { level = 0; score = 0; startLevel(); state = 'play'; K.playing = true; K.clearParts(); }
+function startLevel() {
+  const map = MAPS[level % MAPS.length];
+  grid = map.map(row => row.split(''));
+  const floor = [];
+  grid.forEach((row, r) => row.forEach((ch, c) => {
+    if (ch === 'P') player = { ...centre(c, r), r: 8, vx: 0, vy: 0, step: 0 };
+    if (ch === 'B') box = centre(c, r);
+    if (ch === '.') floor.push([c, r]);
+  }));
+  const far = floor.filter(([c, r]) => Math.hypot(c * T - player.x, r * T - player.y) > 260);
+  const pickN = (arr, n) => arr.sort(() => Math.random() - .5).slice(0, n);
+  fuses = pickN([...far], FUSES).map(([c, r]) => ({ ...centre(c, r), got: false, ph: Math.random() * 6 }));
+  batteries = pickN([...far], Math.max(2, 4 - level)).map(([c, r]) => ({ ...centre(c, r), got: false }));
+  const lair = far.sort((a, b) => Math.hypot(b[0] * T - player.x, b[1] * T - player.y) - Math.hypot(a[0] * T - player.x, a[1] * T - player.y))[0];
+  beast = { ...centre(...lair), r: 11, path: null, repath: 0, lit: false, seen: 0, hiss: 0, wob: 0 };
+  carried = 0; delivered = 0; battery = 100; lightsOn = 0;
+  say(level ? `Floor ${level + 1}. It's quicker now.` : 'Find 5 fuses. Bring them to the box.');
+}
+function say(t) { msg = t; msgT = 3; }
+
+// ---------- visibility ----------
+function castRay(x, y, a, max) {
+  const dx = Math.cos(a), dy = Math.sin(a);
+  for (let d = 0; d < max; d += 4) if (wallAt(x + dx * d, y + dy * d)) return d;
+  return max;
+}
+function lineOfSight(x1, y1, x2, y2) {
+  const d = Math.hypot(x2 - x1, y2 - y1), n = Math.ceil(d / 5);
+  for (let i = 1; i < n; i++) if (wallAt(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n)) return false;
+  return true;
+}
+function inBeam(x, y) {
+  if (battery <= 0) return false;
+  const d = Math.hypot(x - player.x, y - player.y);
+  if (d > RANGE) return false;
+  if (Math.abs(K.angDiff(aim, Math.atan2(y - player.y, x - player.x))) > CONE + .06) return false;
+  return lineOfSight(player.x, player.y, x, y);
+}
+// BFS on the tile grid towards the player
+function pathTo(sx, sy, tx, ty) {
+  const s = [Math.floor(sx / T), Math.floor(sy / T)], g = [Math.floor(tx / T), Math.floor(ty / T)];
+  const key = (c, r) => r * COLS + c, prev = new Int16Array(COLS * ROWS).fill(-1), q = [key(...s)];
+  prev[q[0]] = q[0];
+  for (let i = 0; i < q.length; i++) {
+    const k = q[i], c = k % COLS, r = (k / COLS) | 0;
+    if (c === g[0] && r === g[1]) break;
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nc = c + dc, nr = r + dr, nk = key(nc, nr);
+      if (!wall(nc, nr) && prev[nk] === -1) { prev[nk] = k; q.push(nk); }
+    }
+  }
+  const out = []; let k = key(...g);
+  if (prev[k] === -1) return null;
+  while (k !== key(...s)) { out.push(centre(k % COLS, (k / COLS) | 0)); k = prev[k]; }
+  return out.reverse();
+}
+function moveCircle(o, dx, dy) {
+  o.x += dx; if (wallAt(o.x + Math.sign(dx) * o.r, o.y - o.r + 1) || wallAt(o.x + Math.sign(dx) * o.r, o.y + o.r - 1)) o.x -= dx;
+  o.y += dy; if (wallAt(o.x - o.r + 1, o.y + Math.sign(dy) * o.r) || wallAt(o.x + o.r - 1, o.y + Math.sign(dy) * o.r)) o.y -= dy;
+}
+
+function caught() {
+  state = 'scare'; scareT = 0; K.playing = false;
+  K.noise(1.1, .22, 2400); K.sfx(90, 1, 'sawtooth', .09, -40); K.shake(1);
+  score += delivered * 100 + carried * 50;
+  K.saveBest('nightshift', score); K.submit(score);
+}
+
+function update(dt) {
+  msgT -= dt; flicker = Math.max(0, flicker - dt);
+  if (state === 'scare') { scareT += dt; if (scareT > 1.1) { state = 'over'; endAt = K.t; } return; }
+  if (state === 'clear') { lightsOn += dt; if (lightsOn > 2.6) { level++; startLevel(); state = 'play'; K.playing = true; } return; }
+  if (state !== 'play') return;
+  // movement
+  let ix = (K.key('KeyD', 'ArrowRight') ? 1 : 0) - (K.key('KeyA', 'ArrowLeft') ? 1 : 0), iy = (K.key('KeyS', 'ArrowDown') ? 1 : 0) - (K.key('KeyW', 'ArrowUp') ? 1 : 0);
+  let aimTouch = null;
+  if (K.touch) {
+    const s = K.stick(K.LEFT, 50); if (s) { ix = s.dx; iy = s.dy; }
+    const s2 = K.stick(K.RIGHT, 40); if (s2 && Math.hypot(s2.dx, s2.dy) > .25) aimTouch = Math.atan2(s2.dy, s2.dx);
+  }
+  const m = Math.hypot(ix, iy); if (m > 1) { ix /= m; iy /= m; }
+  const sp = 105;
+  moveCircle(player, ix * sp * dt, iy * sp * dt);
+  if (m > .1) { player.step += dt * 9; if (Math.sin(player.step) > .97) K.sfx(70, .05, 'triangle', .025); }
+  // aim: mouse if it moved, right thumb on touch, otherwise the way you're walking
+  if (K.mouse && !K.touch && (lastMouse === null || Math.hypot(K.mouse.x - lastMouse.x, K.mouse.y - lastMouse.y) > 1)) { mouseAim = true; lastMouse = { ...K.mouse }; }
+  if (m > .1 && K.key('KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight') && !K.mouse) mouseAim = false;
+  let want = aim;
+  if (aimTouch !== null) want = aimTouch;
+  else if (mouseAim && K.mouse) want = Math.atan2(K.mouse.y - player.y, K.mouse.x - player.x);
+  else if (m > .1) want = Math.atan2(iy, ix);
+  aim += K.angDiff(aim, want) * Math.min(1, dt * 12);
+  // battery
+  battery = Math.max(0, battery - dt * (1.6 + level * .25));
+  if (battery < 20 && Math.random() < dt * 3) flicker = .08;
+  // pickups
+  for (const f of fuses) if (!f.got && Math.hypot(f.x - player.x, f.y - player.y) < 16) { f.got = true; carried++; K.sfx(880, .12, 'square', .04, 300); say(`Fuse ${delivered + carried} of ${FUSES}`); }
+  for (const b of batteries) if (!b.got && Math.hypot(b.x - player.x, b.y - player.y) < 16) { b.got = true; battery = Math.min(100, battery + 55); K.sfx(520, .2, 'triangle', .05, 500); say('Fresh batteries'); }
+  if (carried && Math.hypot(box.x - player.x, box.y - player.y) < 26) {
+    delivered += carried; carried = 0; K.sfx(300, .3, 'square', .05, 600); score += 100;
+    if (delivered >= FUSES) { state = 'clear'; lightsOn = 0; K.playing = false; score += 1000 + Math.round(battery) * 5; K.jingle([392, 523, 659, 784], 120, 'square', .05); return; }
+    say(`${FUSES - delivered} to go`);
+  }
+  // the thing in the dark
+  beast.lit = inBeam(beast.x, beast.y);
+  if (beast.lit) { beast.seen += dt; beast.hiss -= dt; if (beast.hiss <= 0) { K.noise(.35, .05, 3000); beast.hiss = 1.4; } }
+  const speed = beast.lit ? 0 : (78 + level * 14) * (battery <= 0 ? 1.5 : 1);
+  beast.repath -= dt;
+  if (beast.repath <= 0) { beast.path = pathTo(beast.x, beast.y, player.x, player.y); beast.repath = .4; }
+  if (beast.path && beast.path.length && speed) {
+    const n = beast.path[0], dx = n.x - beast.x, dy = n.y - beast.y, d = Math.hypot(dx, dy);
+    if (d < 3) beast.path.shift(); else { beast.x += dx / d * Math.min(d, speed * dt); beast.y += dy / d * Math.min(d, speed * dt); }
+  }
+  beast.wob += dt * (beast.lit ? 30 : 4);
+  const near = Math.hypot(beast.x - player.x, beast.y - player.y);
+  beatT -= dt;
+  if (near < 260 && beatT <= 0) { K.sfx(55, .12, 'sine', .12); setTimeout(() => K.sfx(48, .1, 'sine', .09), 140); beatT = K.clamp(near / 220, .35, 1.2); }
+  if (near < player.r + beast.r) caught();
+}
+let mouseAim = false;
+
+// ---------- drawing ----------
+function drawWorld() {
+  ctx.fillStyle = '#1c1a24'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#211f2b'; for (let r = 0; r < ROWS; r++) for (let c = (r % 2); c < COLS; c += 2) ctx.fillRect(c * T, r * T, T, T);
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (grid[r][c] === '#') {
+    ctx.fillStyle = '#3a3546'; ctx.fillRect(c * T, r * T, T, T);
+    ctx.fillStyle = '#4a4458'; ctx.fillRect(c * T, r * T, T, 4);
+    if (!wall(c, r + 1) && r < ROWS - 1) { ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(c * T, (r + 1) * T, T, 6); }
+    if ((c * 7 + r * 3) % 5 === 0) { ctx.fillStyle = '#8a6a3a'; ctx.fillRect(c * T + 4, r * T + 8, 8, 7); ctx.fillStyle = '#b3884b'; ctx.fillRect(c * T + 13, r * T + 10, 7, 5); }
+  }
+  // fuse box
+  ctx.fillStyle = '#5a6475'; K.rr(box.x - 12, box.y - 14, 24, 28, 4); ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
+  for (let i = 0; i < FUSES; i++) K.circle(box.x - 8 + i * 4, box.y - 6, 1.6, i < delivered ? C.mint : '#2a2a35');
+  ctx.fillStyle = C.lemon; ctx.beginPath(); ctx.moveTo(box.x + 1, box.y); ctx.lineTo(box.x - 4, box.y + 8); ctx.lineTo(box.x, box.y + 7); ctx.lineTo(box.x - 2, box.y + 12); ctx.lineTo(box.x + 4, box.y + 4); ctx.lineTo(box.x, box.y + 5); ctx.fill();
+  for (const f of fuses) if (!f.got) { ctx.fillStyle = '#d9a520'; K.rr(f.x - 4, f.y - 8, 8, 16, 3); ctx.fill(); ctx.fillStyle = '#cfd3e0'; ctx.fillRect(f.x - 4, f.y - 8, 8, 3); ctx.fillRect(f.x - 4, f.y + 5, 8, 3); }
+  for (const b of batteries) if (!b.got) { ctx.fillStyle = '#2ee6c1'; K.rr(b.x - 5, b.y - 9, 10, 18, 2); ctx.fill(); ctx.fillStyle = '#15131f'; ctx.fillRect(b.x - 2, b.y - 11, 4, 3); }
+}
+function drawBeast() {
+  const b = beast, sh = b.lit ? Math.sin(b.wob) * 1.5 : 0;
+  ctx.save(); ctx.translate(b.x + sh, b.y);
+  ctx.fillStyle = '#05040a'; ctx.beginPath(); ctx.moveTo(-13, 12); ctx.quadraticCurveTo(-16, -22, 0, -26); ctx.quadraticCurveTo(16, -22, 13, 12);
+  for (let i = 0; i < 5; i++) ctx.lineTo(13 - i * 6.5 - 3, 7 + (i % 2) * 7); ctx.closePath(); ctx.fill();
+  K.circle(-5, -10, 3.4, b.lit ? '#fff' : '#ff3b3b'); K.circle(5, -10, 3.4, b.lit ? '#fff' : '#ff3b3b');
+  K.circle(-5, -10, 1.4, '#000'); K.circle(5, -10, 1.4, '#000');
+  ctx.fillStyle = '#e9e2d0'; for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.moveTo(-8 + i * 4, -2); ctx.lineTo(-6 + i * 4, 3); ctx.lineTo(-4 + i * 4, -2); ctx.fill(); }
+  ctx.restore();
+}
+function drawPlayer() {
+  ctx.save(); ctx.translate(player.x, player.y);
+  K.circle(0, 0, 8, '#ffc93c', '#000', 2);
+  ctx.fillStyle = '#4fc3f7'; ctx.fillRect(-8, -3, 16, 3);
+  K.circle(Math.cos(aim) * 9, Math.sin(aim) * 9, 3, '#cfd3e0', '#000', 1.5);
+  ctx.restore();
+}
+function drawDarkness() {
+  dc.globalCompositeOperation = 'source-over';
+  dc.clearRect(0, 0, W, H);
+  dc.fillStyle = state === 'clear' ? `rgba(0,0,0,${Math.max(0, .96 - lightsOn)})` : 'rgba(2,2,6,.965)';
+  dc.fillRect(0, 0, W, H);
+  if (state === 'clear') return ctx.drawImage(dark, 0, 0);
+  dc.globalCompositeOperation = 'destination-out';
+  // a little ring of light around you, so you can see where you're standing
+  let g = dc.createRadialGradient(player.x, player.y, 4, player.x, player.y, 46);
+  g.addColorStop(0, 'rgba(0,0,0,.85)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  dc.fillStyle = g; dc.beginPath(); dc.arc(player.x, player.y, 46, 0, Math.PI * 2); dc.fill();
+  if (battery > 0 && !flicker) {
+    const reach = RANGE * (.55 + Math.min(1, battery / 40) * .45);
+    dc.beginPath(); dc.moveTo(player.x, player.y);
+    for (let i = 0; i <= 64; i++) { const a = aim - CONE + i / 64 * CONE * 2, d = castRay(player.x, player.y, a, reach); dc.lineTo(player.x + Math.cos(a) * d, player.y + Math.sin(a) * d); }
+    dc.closePath();
+    g = dc.createRadialGradient(player.x, player.y, 10, player.x, player.y, reach);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(.7, 'rgba(0,0,0,.85)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    dc.fillStyle = g; dc.fill();
+  }
+  // the fuse box light and fuses glint faintly so you can find them
+  for (const f of fuses) if (!f.got && Math.sin(K.t * 2 + f.ph) > .6) { dc.fillStyle = 'rgba(0,0,0,.6)'; dc.beginPath(); dc.arc(f.x, f.y, 5, 0, Math.PI * 2); dc.fill(); }
+  dc.fillStyle = `rgba(0,0,0,${.35 + Math.sin(K.t * 3) * .15})`; dc.beginPath(); dc.arc(box.x, box.y, 18, 0, Math.PI * 2); dc.fill();
+  ctx.drawImage(dark, 0, 0);
+  // warm tint in the beam
+  if (battery > 0 && !flicker) { ctx.save(); ctx.globalCompositeOperation = 'overlay'; ctx.fillStyle = 'rgba(255,214,140,.10)'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+}
+function hud() {
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; K.rr(10, 10, 150, 28, 8); ctx.fill();
+  ctx.fillStyle = '#333'; K.rr(18, 18, 80, 12, 4); ctx.fill();
+  ctx.fillStyle = battery < 20 ? C.tomato : C.mint; K.rr(18, 18, 80 * battery / 100, 12, 4); ctx.fill();
+  K.text(`${Math.round(battery)}%`, 104, 25, 12, '#cfd3e0', 'left', 700, false);
+  ctx.fillStyle = 'rgba(0,0,0,.6)'; K.rr(W - 170, 10, 160, 28, 8); ctx.fill();
+  K.text(`Fuses ${delivered}/${FUSES}${carried ? `  (+${carried} in hand)` : ''}`, W - 160, 25, 12, '#ffc93c', 'left', 800, false);
+  if (msgT > 0) { ctx.globalAlpha = Math.min(1, msgT); K.text(msg, W / 2, H - 52, 16, '#e9e2d0', 'center', 700); ctx.globalAlpha = 1; }
+  if (beast.lit && state === 'play') K.text('Keep it in the light', W / 2, 26, 13, '#ff8a8a', 'center', 800);
+}
+
+function draw() {
+  if (state === 'menu') {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    const a = Math.sin(K.t * .7) * .5 - .3;
+    const g = ctx.createRadialGradient(150, 380, 10, 150, 380, 520);
+    g.addColorStop(0, 'rgba(255,214,140,.25)'); g.addColorStop(1, 'rgba(255,214,140,0)');
+    ctx.save(); ctx.beginPath(); ctx.moveTo(150, 380); ctx.arc(150, 380, 560, a - .45, a + .45); ctx.closePath(); ctx.fillStyle = g; ctx.fill(); ctx.restore();
+    const ex = 150 + Math.cos(a) * 420, ey = 380 + Math.sin(a) * 420;
+    if (Math.floor(K.t * 3) % 7) { K.circle(620, 170, 3.5, '#ff3b3b'); K.circle(634, 170, 3.5, '#ff3b3b'); }
+    K.text('Night Shift', W / 2, 110, 70, '#e9e2d0', 'center', 800, '#000');
+    K.text('The power’s out. Something else is on shift too.', W / 2, 160, 18, '#ffc93c', 'center', 700, false);
+    if (K.button(W / 2 - 110, 198, 220, 60, 'Clock in', { key: 'Enter', bg: '#e9e2d0' }) || K.hit('Enter', 'Space')) newGame();
+    K.text('Find 5 fuses and bring them to the fuse box. It can’t move while it’s in your light.', W / 2, 296, 15, '#cfd3e0', 'center', 600, false);
+    K.text(K.touch ? 'Left thumb walks, right thumb points the torch.' : 'WASD to walk, the mouse points the torch. Batteries run down, so grab spares.', W / 2, 322, 14, '#9a95ad', 'center', 600, false);
+    K.text('Contains jump scares. Headphones recommended.', W / 2, 360, 13, '#ff8a8a', 'center', 700, false);
+    const b = K.best('nightshift'); if (b) K.text(`Best ${b.toLocaleString()}`, W / 2, 400, 13, '#ffc93c', 'center', 700, false);
+    return;
+  }
+  drawWorld(); drawBeast(); drawPlayer(); K.drawParts();
+  drawDarkness();
+  hud();
+  if (state === 'clear') { K.banner('Lights back on!', W / 2, H / 2 - 20, 34, C.lemon); K.text(`Floor ${level + 1} done`, W / 2, H / 2 + 26, 16, C.cream, 'center', 700); }
+  if (state === 'scare') {
+    const s = Math.min(1, scareT * 3);
+    ctx.fillStyle = `rgba(0,0,0,${s})`; ctx.fillRect(0, 0, W, H);
+    ctx.save(); ctx.translate(W / 2 + (Math.random() - .5) * 20, H / 2 + (Math.random() - .5) * 20); ctx.scale(1 + s * 7, 1 + s * 7);
+    beast.lit = false; ctx.translate(-beast.x, -beast.y); drawBeast(); ctx.restore();
+  }
+  if (state === 'over') {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    K.text('It got you.', W / 2, 140, 58, '#ff3b3b', 'center', 800, false);
+    K.text(`Floor ${level + 1} · ${delivered} fuses in · ${score.toLocaleString()} points`, W / 2, 196, 18, '#e9e2d0', 'center', 700, false);
+    const best = K.best('nightshift'); K.text(score >= best && score > 0 ? 'New best!' : `Best ${best.toLocaleString()}`, W / 2, 226, 15, C.lemon, 'center', 700, false);
+    if (K.t - endAt > .8) {
+      if (K.button(W / 2 - 210, 266, 190, 56, 'Try again', { key: 'Enter', bg: '#e9e2d0' }) || K.hit('Enter', 'Space')) newGame();
+      if (K.button(W / 2 + 20, 266, 190, 56, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+K.onQuit = () => { state = 'menu'; };
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

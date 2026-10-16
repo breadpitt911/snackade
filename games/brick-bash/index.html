@@ -191,6 +191,7 @@ function draw() {
     }
   }
 }
+K.onQuit = () => { state = 'menu'; bricks = null; };
 K.run(update, draw);
 })();
 </script>

@@ -29,6 +29,7 @@ const P = {
   chat: '<path d="M4 5h16v11H10l-5 4v-4H4z"/>',
   cookie: '<circle cx="12" cy="12" r="9"/><path d="M8.5 10h.01M14 15h.01M9 15.5h.01M15 9.5h.01"/>',
   play: '<path d="M7 4.5v15l13-7.5z" fill="currentColor" stroke="none"/>',
+  shuffle: '<path d="M3 7h3c5 0 7 10 12 10h3M3 17h3c2 0 3.5-1.6 4.7-3.6M14.3 9.6C15.5 8 16.6 7 18 7h3M18 4l3 3-3 3M18 14l3 3-3 3"/>',
   heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.3 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/>',
   heartFill: '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.3 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z" fill="currentColor"/>',
   plays: '<path d="M7 4.5v15l13-7.5z"/>',
@@ -61,6 +62,8 @@ const P = {
   platformer: '<path d="M3 20h5v-5h5v-5h5V5h3"/>',
   strategy: '<path d="M8 21h8M9 21l1-7h4l1 7M9 8h6l-1 6h-4zM9 8 8 4l2 1 2-2 2 2 2-1-1 4"/>',
   casual: '<circle cx="12" cy="12" r="8"/><path d="M8.5 14a4 4 0 0 0 7 0"/><circle cx="9" cy="10" r=".8" fill="currentColor"/><circle cx="15" cy="10" r=".8" fill="currentColor"/>',
+  horror: '<path d="M5 20V11a7 7 0 0 1 14 0v9l-2.3-1.6L14.3 20 12 18.4 9.7 20l-2.4-1.6z"/><circle cx="9.5" cy="11" r=".9" fill="currentColor"/><circle cx="14.5" cy="11" r=".9" fill="currentColor"/>',
+  simulation: '<path d="M4 10h16l-1.5-5h-13zM5 10v9h14v-9M10 19v-5h4v5"/>',
   multiplayer: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2A5 5 0 0 1 21.5 19"/>',
 };
 // ---------- the "bite" used for Snack Score ratings: a cookie with a bite out of it ----------
@@ -74,8 +77,8 @@ export function bite(filled, size = 28) {
 
 export const icon = (name, size) => `<svg viewBox="0 0 24 24" ${size ? `width="${size}" height="${size}"` : ''} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name] || ''}</svg>`;
 
-export const CAT_COLORS = { arcade: '#FFD23F', action: '#FF5A36', shooter: '#22C79A', puzzle: '#8E6CF0', racing: '#4FC3F7', sports: '#A6E22E', platformer: '#FF5DA2', strategy: '#F2B98C', casual: '#FFB800', multiplayer: '#3346FF' };
-export const CAT_NAMES = { arcade: 'Arcade', action: 'Action', shooter: 'Shooters', puzzle: 'Puzzle', racing: 'Racing', sports: 'Sports', platformer: 'Platformers', strategy: 'Strategy', casual: 'Casual', multiplayer: 'Multiplayer' };
+export const CAT_COLORS = { arcade: '#FFD23F', action: '#FF5A36', shooter: '#22C79A', puzzle: '#8E6CF0', racing: '#4FC3F7', sports: '#A6E22E', platformer: '#FF5DA2', strategy: '#F2B98C', casual: '#FFB800', horror: '#C9CFDD', simulation: '#8BD17C', multiplayer: '#3346FF' };
+export const CAT_NAMES = { arcade: 'Arcade', action: 'Action', shooter: 'Shooters', puzzle: 'Puzzle', racing: 'Racing', sports: 'Sports', platformer: 'Platformers', strategy: 'Strategy', casual: 'Casual', horror: 'Horror', simulation: 'Simulation', multiplayer: 'Multiplayer' };
 
 // ---------- avatars: little snack creatures ----------
 export const AV_COLORS = ['#3346FF', '#FFD23F', '#FF5DA2', '#22C79A', '#FF5A36', '#4FC3F7', '#8E6CF0', '#A6E22E'];

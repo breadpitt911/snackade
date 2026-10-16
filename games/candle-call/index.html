@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Candle Call</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#0d0716}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 640, H: 480 }), { ctx, C } = K, W = 640, H = 480;
+const CX = 320, CY = 268, RING = 158, N = 6, STRIKES = 3;
+const TONES = [196, 233.1, 261.6, 311.1, 349.2, 392];
+const TINT = ['#ffb347', '#ff6b9d', '#9d7bff', '#4fc3f7', '#7cffb2', '#ffe66b'];
+let state = 'menu', mode = 1, seq = [], pos = 0, strikes = 0, turnP = 0, round = 0, flare = Array(6).fill(0), play = null, endAt = 0, msg = '', ghostIn = 0, scareT = 0, planchette = { x: CX, y: CY }, best;
+
+const candle = i => { const a = -Math.PI / 2 + i / N * Math.PI * 2; return { x: CX + Math.cos(a) * RING, y: CY + Math.sin(a) * RING * .72 }; };
+function newGame(m) {
+  mode = m; seq = []; pos = 0; strikes = 0; turnP = 0; round = 0; flare = Array(N).fill(0); ghostIn = 0;
+  state = 'play'; K.playing = true;
+  if (mode === 1) addAndShow(); else { msg = 'Player 1: light any candle to begin'; phase = 'input'; }
+}
+let phase = 'show';
+function addAndShow() { seq.push(K.irnd(0, N - 1)); round = seq.length; showSeq(.9); }
+function showSeq(delay) {
+  phase = 'show'; pos = 0; msg = 'The spirits are speaking…';
+  const step = Math.max(.28, .62 - seq.length * .025);
+  play = { i: 0, t: -delay, step };
+}
+function light(i, by) {
+  flare[i] = 1;
+  K.sfx(TONES[i], .5, 'triangle', .06); K.sfx(TONES[i] * 1.006, .5, 'sine', .03);
+  K.burst(candle(i).x, candle(i).y - 46, 6, [TINT[i], '#fff4e0'], 50, .7, 2, -60);
+  planchetteTo = candle(i);
+}
+let planchetteTo = { x: CX, y: CY };
+
+function press(i) {
+  if (state !== 'play' || phase !== 'input') return;
+  light(i);
+  if (mode === 2 && pos === seq.length) {          // the player adds a new candle
+    seq.push(i); pos = 0; turnP = 1 - turnP; round = seq.length;
+    msg = `Player ${turnP + 1}: repeat all ${seq.length}, then add one`;
+    return;
+  }
+  if (seq[pos] === i) {
+    pos++;
+    if (mode === 1 && pos === seq.length) { phase = 'wait'; msg = 'Yes…'; setTimeout(() => { if (state === 'play') addAndShow(); }, 700); }
+    if (mode === 2 && pos === seq.length) msg = `Player ${turnP + 1}: now add one more`;
+  } else wrong();
+}
+function wrong() {
+  K.noise(.6, .1, 500); K.sfx(80, .7, 'sawtooth', .06, -30); K.shake(.5);
+  if (mode === 2) return finish(1 - turnP);
+  strikes++; ghostIn = strikes / STRIKES;
+  if (strikes >= STRIKES) return finish(-1);
+  msg = strikes === 1 ? 'Wrong candle. Something stirred.' : 'It’s getting closer…';
+  phase = 'wait'; setTimeout(() => { if (state === 'play') showSeq(.6); }, 1300);
+}
+function finish(winner) {
+  phase = 'done'; K.playing = false;
+  if (mode === 1) { state = 'scare'; scareT = 0; K.noise(1.2, .22, 2600); K.sfx(70, 1.1, 'sawtooth', .09, -30); const sc = (seq.length - 1) * 100; K.saveBest('candles', sc); K.submit(sc); }
+  else { state = 'over'; endAt = K.t; winnerP = winner; }
+}
+let winnerP = 0;
+
+function update(dt) {
+  for (let i = 0; i < N; i++) flare[i] = Math.max(0, flare[i] - dt * 2.2);
+  planchette.x += (planchetteTo.x * .45 + CX * .55 - planchette.x) * Math.min(1, dt * 4);
+  planchette.y += (planchetteTo.y * .45 + CY * .55 - planchette.y) * Math.min(1, dt * 4);
+  if (state === 'scare') { scareT += dt; if (scareT > 1.2) { state = 'over'; endAt = K.t; } return; }
+  if (state !== 'play') return;
+  if (phase === 'show' && play) {
+    play.t += dt;
+    if (play.t >= 0) {
+      const k = Math.floor(play.t / play.step);
+      if (k >= seq.length) { phase = 'input'; play = null; msg = 'Your turn. Light them in the same order.'; }
+      else if (k >= play.i) { light(seq[k]); play.i = k + 1; }
+    }
+    return;
+  }
+  if (phase !== 'input') return;
+  for (let i = 0; i < N; i++) if (K.hit('Digit' + (i + 1))) press(i);
+  for (const t of K.taps()) for (let i = 0; i < N; i++) { const c = candle(i); if (Math.abs(t.x - c.x) < 34 && t.y > c.y - 80 && t.y < c.y + 30) press(i); }
+}
+
+function room() {
+  ctx.fillStyle = '#0d0716'; ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(CX, CY, 40, CX, CY, 420); g.addColorStop(0, 'rgba(120,70,160,.25)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // the face that gets closer
+  const face = state === 'menu' ? .08 + Math.sin(K.t) * .03 : ghostIn * .28 + (phase === 'show' ? .03 : 0);
+  if (face > 0) {
+    ctx.save(); ctx.globalAlpha = face; ctx.translate(CX, 120 + (1 - ghostIn) * 10); ctx.scale(1 + ghostIn * .2, 1 + ghostIn * .2);
+    ctx.fillStyle = '#d8d0ff'; ctx.beginPath(); ctx.ellipse(0, 0, 90, 110, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0d0716'; ctx.beginPath(); ctx.ellipse(-32, -10, 18, 26, -.2, 0, Math.PI * 2); ctx.ellipse(32, -10, 18, 26, .2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 52, 22, 30, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  // table + spirit board
+  ctx.fillStyle = '#1b0f12'; ctx.beginPath(); ctx.ellipse(CX, CY + 18, 236, 150, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3b2018'; ctx.beginPath(); ctx.ellipse(CX, CY, 228, 140, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#5a3324'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#c9a66b'; K.rr(CX - 110, CY - 50, 220, 100, 18); ctx.fill(); ctx.strokeStyle = '#6b4a2b'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.font = `700 13px ${K.FONT}`; ctx.fillStyle = 'rgba(59,32,24,.75)'; ctx.textAlign = 'center';
+  ctx.fillText('A B C D E F G H I J K L M', CX, CY - 20); ctx.fillText('N O P Q R S T U V W X Y Z', CX, CY + 2); ctx.fillText('YES          GOODBYE          NO', CX, CY + 32);
+  // planchette
+  ctx.save(); ctx.translate(planchette.x, planchette.y);
+  ctx.fillStyle = 'rgba(255,244,224,.85)'; ctx.beginPath(); ctx.moveTo(0, -20); ctx.quadraticCurveTo(20, 0, 14, 16); ctx.lineTo(-14, 16); ctx.quadraticCurveTo(-20, 0, 0, -20); ctx.fill();
+  ctx.strokeStyle = '#3b2018'; ctx.lineWidth = 2; ctx.stroke(); K.circle(0, 0, 6, null, '#3b2018', 2);
+  ctx.restore();
+}
+function drawCandle(i) {
+  const c = candle(i), f = flare[i], ready = state === 'play' && phase === 'input';
+  const hover = ready && K.mouse && !K.touch && Math.abs(K.mouse.x - c.x) < 34 && K.mouse.y > c.y - 80 && K.mouse.y < c.y + 30;
+  // glow
+  const r = 40 + f * 70 + (hover ? 10 : 0);
+  const g = ctx.createRadialGradient(c.x, c.y - 46, 2, c.x, c.y - 46, r);
+  g.addColorStop(0, TINT[i] + (f > .1 ? 'cc' : '55')); g.addColorStop(1, TINT[i] + '00');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y - 46, r, 0, Math.PI * 2); ctx.fill();
+  // wax
+  ctx.fillStyle = '#efe6d2'; K.rr(c.x - 11, c.y - 34, 22, 40, 5); ctx.fill(); ctx.strokeStyle = '#15131f'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#e0d4bb'; ctx.beginPath(); ctx.moveTo(c.x - 11, c.y - 30); ctx.quadraticCurveTo(c.x - 7, c.y - 18, c.x - 4, c.y - 30); ctx.fill();
+  ctx.fillStyle = '#5a3324'; ctx.beginPath(); ctx.ellipse(c.x, c.y + 8, 20, 6, 0, 0, Math.PI * 2); ctx.fill();
+  // flame
+  const h = 16 + f * 18 + Math.sin(K.t * 13 + i) * 2, sway = Math.sin(K.t * 7 + i * 2) * 2;
+  ctx.fillStyle = TINT[i]; ctx.beginPath(); ctx.moveTo(c.x, c.y - 36); ctx.quadraticCurveTo(c.x - 8, c.y - 40 - h * .4, c.x + sway, c.y - 36 - h); ctx.quadraticCurveTo(c.x + 8, c.y - 40 - h * .4, c.x, c.y - 36); ctx.fill();
+  ctx.fillStyle = '#fff8e0'; ctx.beginPath(); ctx.ellipse(c.x + sway * .3, c.y - 42, 3, 5 + f * 4, 0, 0, Math.PI * 2); ctx.fill();
+  if (!K.touch) K.text(String(i + 1), c.x, c.y + 24, 11, 'rgba(255,244,224,.45)', 'center', 800, false);
+}
+
+function draw() {
+  room();
+  if (state === 'menu') {
+    if (Math.random() < .03) flare[K.irnd(0, N - 1)] = .7;
+    for (let i = 0; i < N; i++) drawCandle(i);
+    ctx.fillStyle = 'rgba(13,7,22,.8)'; ctx.fillRect(0, 0, W, H);
+    K.text('Candle Call', W / 2, 74, 62, '#efe6d2', 'center', 800, '#000');
+    K.text('The spirits light the candles. You light them back. Don’t get it wrong.', W / 2, 118, 15, '#c9b8f0', 'center', 700, false);
+    if (K.button(W / 2 - 220, 160, 200, 58, 'Hold a séance', { key: '1', bg: '#efe6d2', size: 18 }) || K.hit('Digit1')) newGame(1);
+    if (K.button(W / 2 + 20, 160, 200, 58, '2 Players', { key: '2', bg: C.gum }) || K.hit('Digit2')) newGame(2);
+    K.text('Two players: pass the phone. Repeat the whole chain, then add one candle.', W / 2, 262, 13, '#cfcde6', 'center', 600, false);
+    K.text(K.touch ? 'Tap the candles' : 'Click the candles, or press 1 to 6', W / 2, 284, 13, '#9a95ad', 'center', 600, false);
+    K.text('Three wrong candles and something comes to the table.', W / 2, 438, 13, '#ff8a9b', 'center', 700, false);
+    best = K.best('candles'); if (best) K.text(`Longest chain ${best / 100 | 0}`, W / 2, 460, 12, C.lemon, 'center', 700, false);
+    return;
+  }
+  for (let i = 0; i < N; i++) drawCandle(i);
+  K.drawParts();
+  // header
+  K.text(`Chain ${seq.length}`, 20, 24, 18, '#efe6d2', 'left', 800, false);
+  if (mode === 1) for (let k = 0; k < STRIKES; k++) K.circle(W - 24 - k * 22, 24, 7, k < strikes ? '#ff3b5c' : 'rgba(255,255,255,.12)', '#000', 2);
+  else K.text(`Player ${turnP + 1}`, W - 20, 24, 18, turnP ? C.gum : C.lemon, 'right', 800, false);
+  if (state === 'play') K.banner(msg, W / 2, H - 28, 15, phase === 'input' ? '#fff4e0' : '#c9b8f0');
+  if (state === 'scare') {
+    const s = Math.min(1, scareT * 2.5);
+    ctx.fillStyle = `rgba(0,0,0,${s * .9})`; ctx.fillRect(0, 0, W, H);
+    ctx.save(); ctx.translate(CX + (Math.random() - .5) * 18, H / 2 + (Math.random() - .5) * 18); ctx.scale(.6 + s * 2.4, .6 + s * 2.4);
+    ctx.fillStyle = '#e8e2ff'; ctx.beginPath(); ctx.ellipse(0, 0, 90, 110, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(-32, -14, 20, 30, -.2, 0, Math.PI * 2); ctx.ellipse(32, -14, 20, 30, .2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 54, 26, 40, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  if (state === 'over') {
+    ctx.fillStyle = 'rgba(13,7,22,.88)'; ctx.fillRect(0, 0, W, H);
+    if (mode === 1) {
+      K.text('The candles went out.', W / 2, 160, 40, '#efe6d2', 'center', 800, '#000');
+      K.text(`Your longest chain: ${seq.length - 1}`, W / 2, 208, 20, '#c9b8f0', 'center', 700, false);
+      const b = K.best('candles'); if ((seq.length - 1) * 100 >= b && b) K.text('New best!', W / 2, 236, 15, C.lemon, 'center', 700, false);
+    } else {
+      K.text(`Player ${winnerP + 1} wins!`, W / 2, 160, 46, winnerP ? C.gum : C.lemon, 'center', 800, '#000');
+      K.text(`Player ${2 - winnerP} broke the chain at ${seq.length}`, W / 2, 208, 18, '#c9b8f0', 'center', 700, false);
+    }
+    if (K.t - endAt > .7) {
+      if (K.button(W / 2 - 210, 270, 190, 56, 'Again', { key: 'Enter', bg: '#efe6d2' }) || K.hit('Enter', 'Space')) newGame(mode);
+      if (K.button(W / 2 + 20, 270, 190, 56, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
+    }
+  }
+}
+K.onQuit = () => { state = 'menu'; };
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

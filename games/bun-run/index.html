@@ -153,6 +153,7 @@ function draw() {
     if (K.button(W / 2 + 20, 264, 190, 56, 'Menu', { bg: C.mint }) || K.hit('Escape')) state = 'menu';
   }
 }
+K.onQuit = () => { state = 'menu'; };
 K.run(update, draw);
 })();
 </script>

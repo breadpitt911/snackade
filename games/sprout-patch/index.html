@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Sprout Patch</title>
+<link rel="stylesheet" href="/kit/kit.css">
+<style>:root{--bg:#7cc576}</style>
+</head>
+<body>
+<script src="/kit/kit.js"></script>
+<script>
+(() => {
+const K = Kit({ W: 800, H: 450 }), { ctx, C } = K, W = 800, H = 450;
+const PC = 4, PR = 3, PW = 118, PH = 104, PX = 24, PY = 70, DAY_LEN = 40, DAYS = 7;
+const CROPS = [
+  { id: 'carrot', name: 'Carrot', seed: 2, sell: 6, grow: 8, day: 1, col: '#ff8a2a' },
+  { id: 'tomato', name: 'Tomato', seed: 4, sell: 12, grow: 14, day: 2, col: '#ef3b3b' },
+  { id: 'berry', name: 'Strawberry', seed: 6, sell: 19, grow: 18, day: 3, col: '#ff4f6d' },
+  { id: 'pumpkin', name: 'Pumpkin', seed: 10, sell: 34, grow: 26, day: 4, col: '#f28c28' },
+];
+const SHOP = [
+  { id: 'plot', name: 'New plot', desc: 'More room to grow', cost: () => 12 + plots.filter(p => p.open).length * 4, repeat: true },
+  { id: 'sprinkler', name: 'Sprinkler', desc: 'Waters everything every 8s', cost: () => 60 },
+  { id: 'scarecrow', name: 'Scarecrow', desc: 'Keeps the crows away', cost: () => 35 },
+  { id: 'fert', name: 'Fertiliser', desc: 'Crops grow 40% faster', cost: () => 50 },
+];
+const WEATHER = { sun: { name: 'Sunny', dry: 1 / 9 }, cloud: { name: 'Cloudy', dry: 1 / 15 }, rain: { name: 'Rainy', dry: 0 } };
+let state = 'menu', plots, coins, day, clock, pick = 0, owned, weather, crows, crowT, sprinkT, harvested, endAt = 0, cursor = 0, msg = '', msgT = 0, drops = [], tomorrow;
+
+const plotXY = i => ({ x: PX + (i % PC) * (PW + 8), y: PY + Math.floor(i / PC) * (PH + 8) });
+function newGame() {
+  plots = Array.from({ length: PC * PR }, (_, i) => ({ open: i % PC < 2 && Math.floor(i / PC) < 2 || i === 2, crop: null, g: 0, wet: 0, pop: 0 }));
+  coins = 15; day = 1; owned = new Set(); harvested = 0; weather = 'sun'; tomorrow = K.pick(['sun', 'cloud', 'rain']);
+  startDay(); say('Pick a seed, tap a plot to plant it, tap again to water.');
+}
+function startDay() { clock = DAY_LEN; crows = []; crowT = K.rnd(6, 10); sprinkT = 8; state = 'play'; K.playing = true; if (weather === 'rain') plots.forEach(p => p.wet = 1); }
+function say(t) { msg = t; msgT = 3.5; }
+const growRate = () => owned.has('fert') ? 1.4 : 1;
+const cropOf = p => CROPS.find(c => c.id === p.crop);
+
+function act(i) {
+  const p = plots[i];
+  if (!p.open) return say('Buy a new plot in the shop to use this patch.');
+  const crow = crows.find(c => c.plot === i && !c.gone);
+  if (crow) { crow.gone = true; crow.flee = 1; K.sfx(900, .15, 'square', .04, -500); return; }
+  if (!p.crop) {
+    const c = CROPS[pick];
+    if (c.day > day) return say(`${c.name} seeds arrive on day ${c.day}.`);
+    if (coins < c.seed) return say(`Not enough coins for ${c.name.toLowerCase()} seeds.`);
+    coins -= c.seed; p.crop = c.id; p.g = 0; p.wet = Math.max(p.wet, .3); p.pop = K.t;
+    K.sfx(420, .08, 'triangle', .05, 200); return;
+  }
+  const c = cropOf(p);
+  if (p.g >= c.grow) {
+    coins += c.sell; harvested++; p.crop = null; p.g = 0; p.pop = K.t;
+    const { x, y } = plotXY(i); K.burst(x + PW / 2, y + PH / 2, 14, [c.col, '#7bd94a', C.lemon], 160, .6, 3, 200);
+    drops.push({ x: x + PW / 2, y: y + 20, t: 0, s: `+${c.sell}` });
+    K.jingle([660, 880], 60, 'triangle', .05); return;
+  }
+  p.wet = 1; const { x, y } = plotXY(i);
+  K.burst(x + PW / 2, y + PH / 2, 10, ['#7fd3ff', '#bfe8ff'], 90, .45, 2.5, 220); K.noise(.18, .04, 2500);
+}
+
+function update(dt) {
+  msgT -= dt;
+  for (const d of drops) d.t += dt; drops = drops.filter(d => d.t < 1);
+  if (state !== 'play') return;
+  clock -= dt;
+  const dry = WEATHER[weather].dry;
+  for (const p of plots) {
+    if (!p.open) continue;
+    if (weather === 'rain') p.wet = 1;
+    p.wet = Math.max(0, p.wet - dry * dt);
+    if (p.crop && p.wet > 0 && p.g < cropOf(p).grow) p.g = Math.min(cropOf(p).grow, p.g + dt * growRate());
+  }
+  if (owned.has('sprinkler')) { sprinkT -= dt; if (sprinkT <= 0) { sprinkT = 8; plots.forEach(p => { if (p.open) p.wet = 1; }); K.noise(.4, .03, 3000); } }
+  // crows go for growing crops unless there's a scarecrow
+  if (!owned.has('scarecrow')) {
+    crowT -= dt;
+    const targets = plots.map((p, i) => i).filter(i => plots[i].crop && !crows.some(c => c.plot === i && !c.gone));
+    if (crowT <= 0 && targets.length) { const i = K.pick(targets), { x, y } = plotXY(i); crows.push({ plot: i, x: W + 30, y: -20, tx: x + PW / 2, ty: y + 30, t: 0, gone: false }); crowT = K.rnd(7, 12) - Math.min(4, day * .5); K.sfx(300, .25, 'sawtooth', .03, -100); }
+  }
+  for (const c of crows) {
+    if (c.gone) { c.x += 360 * dt; c.y -= 220 * dt; continue; }
+    c.x += (c.tx - c.x) * Math.min(1, dt * 3); c.y += (c.ty - c.y) * Math.min(1, dt * 3);
+    if (Math.hypot(c.tx - c.x, c.ty - c.y) < 4) { c.t += dt; if (c.t > 4) { c.gone = true; const p = plots[c.plot]; if (p.crop) { p.crop = null; p.g = 0; say('A crow ate your crop! Tap crows to scare them off.'); K.sfx(200, .4, 'sawtooth', .04, -80); } } }
+  }
+  crows = crows.filter(c => !(c.gone && (c.x > W + 40 || c.y < -40)));
+  // input
+  for (let k = 0; k < CROPS.length; k++) if (K.hit('Digit' + (k + 1))) pick = k;
+  if (K.hit('ArrowRight', 'KeyD')) cursor = (cursor + 1) % plots.length;
+  if (K.hit('ArrowLeft', 'KeyA')) cursor = (cursor + plots.length - 1) % plots.length;
+  if (K.hit('ArrowDown', 'KeyS')) cursor = (cursor + PC) % plots.length;
+  if (K.hit('ArrowUp', 'KeyW')) cursor = (cursor + plots.length - PC) % plots.length;
+  if (K.hit('Space', 'Enter')) act(cursor);
+  for (const t of K.taps()) {
+    for (const c of crows) if (!c.gone && Math.hypot(t.x - c.x, t.y - c.y) < 26) { c.gone = true; K.sfx(900, .15, 'square', .04, -500); }
+    for (let i = 0; i < plots.length; i++) { const { x, y } = plotXY(i); if (t.x > x && t.x < x + PW && t.y > y && t.y < y + PH) { cursor = i; act(i); } }
+  }
+  if (clock <= 0) endDay();
+}
+function endDay() {
+  state = day >= DAYS ? 'done' : 'night'; K.playing = false; endAt = K.t;
+  if (state === 'done') { const sc = coins + harvested * 5; K.saveBest('sprout', sc); K.submit(sc); K.jingle([523, 659, 784, 1046], 110, 'square', .045); }
+}
+function nextDay() { day++; weather = tomorrow; tomorrow = K.pick(['sun', 'sun', 'cloud', 'rain']); startDay(); if (CROPS.some(c => c.day === day)) say(`New seeds: ${CROPS.find(c => c.day === day).name.toLowerCase()}!`); }
+
+// ---------- drawing ----------
+function drawCrop(p, cx, cy) {
+  const c = cropOf(p), f = Math.min(1, p.g / c.grow), ready = f >= 1;
+  const bob = Math.sin(K.t * 3 + cx) * (ready ? 2 : 0);
+  if (f < .3) { ctx.strokeStyle = '#3e8e2a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx, cy + 10); ctx.lineTo(cx, cy); ctx.stroke(); K.circle(cx - 4, cy, 4, '#7bd94a'); K.circle(cx + 4, cy - 2, 4, '#7bd94a'); return; }
+  const s = .6 + f * .5;
+  ctx.save(); ctx.translate(cx, cy + bob); ctx.scale(s, s);
+  if (c.id === 'carrot') {
+    for (const a of [-.5, 0, .5]) { ctx.strokeStyle = '#3e8e2a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.sin(a) * 18, -22); ctx.stroke(); }
+    if (ready) { ctx.fillStyle = c.col; ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(9, 0); ctx.lineTo(0, 18); ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#15131f'; ctx.lineWidth = 2; ctx.stroke(); }
+  } else if (c.id === 'pumpkin') {
+    ctx.strokeStyle = '#3e8e2a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-26, 6); ctx.quadraticCurveTo(0, -24, 26, 6); ctx.stroke();
+    K.circle(-18, -4, 8, '#5aa83a'); K.circle(18, -4, 8, '#5aa83a');
+    const r = ready ? 18 : 10;
+    ctx.fillStyle = c.col; ctx.beginPath(); ctx.ellipse(0, 4, r * 1.2, r, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#15131f'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, 4 - r); ctx.lineTo(0, 4 + r); ctx.moveTo(-r * .55, 4 - r * .9); ctx.quadraticCurveTo(-r * .8, 4, -r * .55, 4 + r * .9); ctx.moveTo(r * .55, 4 - r * .9); ctx.quadraticCurveTo(r * .8, 4, r * .55, 4 + r * .9); ctx.strokeStyle = 'rgba(21,19,31,.35)'; ctx.stroke();
+    ctx.fillStyle = '#5b3420'; ctx.fillRect(-2, 4 - r - 6, 4, 7);
+  } else {
+    ctx.fillStyle = '#4caf50'; for (const [x, y] of [[-12, -6], [12, -6], [0, -16], [-6, 4], [8, 4]]) { ctx.beginPath(); ctx.ellipse(x, y, 10, 6, x / 10, 0, Math.PI * 2); ctx.fill(); }
+    if (ready || f > .7) for (const [x, y] of [[-10, 2], [8, -2], [0, 8]]) { if (c.id === 'berry') K.snack('berry', x, y, 7); else K.circle(x, y, 7, ready ? c.col : '#9bd16a', '#15131f', 1.5); }
+  }
+  ctx.restore();
+}
+function drawPlot(p, i) {
+  const { x, y } = plotXY(i);
+  if (!p.open) {
+    ctx.fillStyle = 'rgba(80,140,60,.6)'; K.rr(x, y, PW, PH, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(21,19,31,.25)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2; K.rr(x + 4, y + 4, PW - 8, PH - 8, 10); ctx.stroke(); ctx.setLineDash([]);
+    return;
+  }
+  const pop = K.t - p.pop < .2 ? 1 + Math.sin((K.t - p.pop) / .2 * Math.PI) * .05 : 1;
+  ctx.save(); ctx.translate(x + PW / 2, y + PH / 2); ctx.scale(pop, pop); ctx.translate(-x - PW / 2, -y - PH / 2);
+  ctx.fillStyle = 'rgba(21,19,31,.3)'; K.rr(x + 3, y + 5, PW, PH, 12); ctx.fill();
+  ctx.fillStyle = `rgb(${150 - p.wet * 60},${100 - p.wet * 40},${60 - p.wet * 25})`; K.rr(x, y, PW, PH, 12); ctx.fill();
+  ctx.strokeStyle = '#15131f'; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.strokeStyle = 'rgba(0,0,0,.15)'; ctx.lineWidth = 3; for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.moveTo(x + 10, y + k * PH / 4); ctx.lineTo(x + PW - 10, y + k * PH / 4); ctx.stroke(); }
+  if (p.crop) {
+    drawCrop(p, x + PW / 2, y + PH / 2 + 6);
+    const c = cropOf(p), f = Math.min(1, p.g / c.grow);
+    if (f < 1) { ctx.fillStyle = 'rgba(0,0,0,.35)'; K.rr(x + 10, y + PH - 14, PW - 20, 6, 3); ctx.fill(); ctx.fillStyle = '#7bd94a'; K.rr(x + 10, y + PH - 14, (PW - 20) * f, 6, 3); ctx.fill(); }
+    else K.text('Harvest!', x + PW / 2, y + 14, 12, '#fff4e0', 'center', 800);
+    if (p.wet <= 0 && f < 1) K.text('Thirsty', x + PW / 2, y + 14, 12, '#bfe8ff', 'center', 800);
+  }
+  ctx.restore();
+}
+function drawCrow(c) {
+  ctx.save(); ctx.translate(c.x, c.y); if (c.gone) ctx.rotate(-.4);
+  const flap = Math.sin(K.t * (c.t > 0 && !c.gone ? 4 : 22)) * 8;
+  ctx.fillStyle = '#1b1530'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 10, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-4, -2); ctx.lineTo(-18, -8 - flap); ctx.lineTo(-2, 4); ctx.fill(); ctx.beginPath(); ctx.moveTo(4, -2); ctx.lineTo(18, -8 - flap); ctx.lineTo(2, 4); ctx.fill();
+  K.circle(10, -6, 6, '#1b1530'); K.circle(12, -7, 1.8, '#fff'); ctx.fillStyle = '#ffc93c'; ctx.beginPath(); ctx.moveTo(15, -6); ctx.lineTo(22, -4); ctx.lineTo(15, -2); ctx.fill();
+  if (!c.gone && c.t > 0) { ctx.strokeStyle = '#ff5a36'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 22, -Math.PI / 2, -Math.PI / 2 + (c.t / 4) * Math.PI * 2); ctx.stroke(); }
+  ctx.restore();
+}
+function panel() {
+  const x = 540;
+  ctx.fillStyle = '#fff4e0'; K.rr(x, 8, W - x - 10, H - 16, 16); ctx.fill(); ctx.strokeStyle = '#15131f'; ctx.lineWidth = 3; ctx.stroke();
+  K.text(`Day ${day} of ${DAYS}`, x + 14, 28, 16, '#15131f', 'left', 800, false);
+  K.text(WEATHER[weather].name, W - 24, 28, 13, '#5a5a7a', 'right', 800, false);
+  ctx.fillStyle = '#e8e2d4'; K.rr(x + 14, 42, W - x - 38, 8, 4); ctx.fill();
+  ctx.fillStyle = clock < 8 ? C.tomato : '#7bd94a'; K.rr(x + 14, 42, (W - x - 38) * Math.max(0, clock) / DAY_LEN, 8, 4); ctx.fill();
+  K.text(`${coins} coins`, x + 14, 70, 20, '#c27a00', 'left', 800, false);
+  K.text('Seeds', x + 14, 98, 13, '#5a5a7a', 'left', 800, false);
+  CROPS.forEach((c, k) => {
+    const bx = x + 12 + (k % 2) * 118, by = 108 + Math.floor(k / 2) * 60, locked = c.day > day, on = pick === k;
+    ctx.fillStyle = on ? '#ffe58a' : locked ? '#ece8df' : '#fff'; K.rr(bx, by, 110, 52, 10); ctx.fill(); ctx.strokeStyle = on ? '#15131f' : '#c9c2b3'; ctx.lineWidth = on ? 3 : 2; ctx.stroke();
+    K.text(c.name, bx + 10, by + 16, 13, locked ? '#a49d8c' : '#15131f', 'left', 800, false);
+    K.text(locked ? `Day ${c.day}` : `${c.seed} → ${c.sell} coins`, bx + 10, by + 36, 11, locked ? '#a49d8c' : '#5a5a7a', 'left', 700, false);
+    if (!K.touch && !locked) K.text(String(k + 1), bx + 98, by + 14, 10, '#a49d8c', 'center', 800, false);
+    if (K.tappedIn({ x: bx, y: by, w: 110, h: 52 }) && !locked) { pick = k; K.sfx(600, .05, 'square', .03); }
+  });
+  K.text('Shop', x + 14, 240, 13, '#5a5a7a', 'left', 800, false);
+  SHOP.forEach((s, k) => {
+    const by = 250 + k * 46, have = !s.repeat && owned.has(s.id), cost = s.cost(), full = s.id === 'plot' && plots.every(p => p.open);
+    K.text(s.name, x + 14, by + 12, 13, '#15131f', 'left', 800, false); K.text(s.desc, x + 14, by + 30, 11, '#5a5a7a', 'left', 600, false);
+    if (have || full) K.text(full ? 'All open' : 'Got it', W - 26, by + 18, 12, '#3e8e2a', 'right', 800, false);
+    else if (K.button(W - 100, by + 2, 74, 32, `${cost}`, { size: 14, bg: coins >= cost ? C.lemon : '#d8d2c4' }) && coins >= cost && state === 'play') {
+      coins -= cost; K.jingle([660, 990], 70, 'triangle', .05);
+      if (s.id === 'plot') { const p = plots.find(p => !p.open); p.open = true; p.pop = K.t; } else owned.add(s.id);
+    }
+  });
+}
+
+function draw() {
+  ctx.fillStyle = '#7cc576'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#86cf80'; for (let y = 0; y < H; y += 30) for (let x = (y / 30 % 2) * 30; x < W; x += 60) ctx.fillRect(x, y, 30, 30);
+  if (state === 'menu') {
+    ['carrot', 'tomato', 'berry', 'pumpkin'].forEach((id, k) => drawCrop({ crop: id, g: 99 }, 140 + k * 170, 360));
+    K.text('Sprout Patch', W / 2, 100, 72, '#fff4e0', 'center', 800, '#2f6b2a');
+    K.text('Plant, water, harvest, repeat. A whole season in seven short days.', W / 2, 150, 18, '#1f4d1b', 'center', 800, false);
+    if (K.button(W / 2 - 110, 186, 220, 60, 'Start the season', { key: 'Enter', size: 18 }) || K.hit('Enter', 'Space')) newGame();
+    K.text(K.touch ? 'Tap a plot to plant, tap to water, tap to harvest. Tap crows to shoo them.' : 'Click a plot to plant, water and harvest (or arrows + Space). Click crows to shoo them.', W / 2, 284, 14, '#1f4d1b', 'center', 700, false);
+    const b = K.best('sprout'); if (b) K.text(`Best season: ${b.toLocaleString()}`, W / 2, 310, 14, '#1f4d1b', 'center', 800, false);
+    return;
+  }
+  ctx.fillStyle = '#5b3a20'; K.rr(PX - 10, PY - 10, PC * (PW + 8) + 12, PR * (PH + 8) + 12, 18); ctx.fill();
+  plots.forEach(drawPlot);
+  if (!K.touch && state === 'play') { const { x, y } = plotXY(cursor); ctx.strokeStyle = '#fff4e0'; ctx.lineWidth = 3; ctx.setLineDash([7, 5]); K.rr(x - 4, y - 4, PW + 8, PH + 8, 14); ctx.stroke(); ctx.setLineDash([]); }
+  if (weather === 'rain') { ctx.strokeStyle = 'rgba(191,232,255,.6)'; ctx.lineWidth = 2; for (let k = 0; k < 60; k++) { const rx = (k * 97 + K.t * 200) % 540, ry = (k * 53 + K.t * 600) % H; ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx - 4, ry + 12); ctx.stroke(); } }
+  crows.forEach(drawCrow);
+  K.drawParts();
+  for (const d of drops) K.text(d.s, d.x, d.y - d.t * 40, 18, '#ffe066', 'center', 800, '#15131f');
+  K.text('Garden', PX, 40, 22, '#fff4e0', 'left', 800, '#2f6b2a');
+  if (owned.has('scarecrow')) K.text('Scarecrow on duty', PX + 110, 40, 13, '#1f4d1b', 'left', 800, false);
+  panel();
+  if (msgT > 0 && state === 'play') { ctx.globalAlpha = Math.min(1, msgT); K.banner(msg, 270, H - 18, 13, '#fff4e0'); ctx.globalAlpha = 1; }
+  if (state === 'night' || state === 'done') {
+    ctx.fillStyle = 'rgba(16,20,48,.8)'; ctx.fillRect(0, 0, W, H);
+    if (state === 'night') {
+      K.text(`Day ${day} done`, W / 2, 130, 44, '#fff4e0');
+      K.text(`${coins} coins in the jar. Tomorrow looks ${WEATHER[tomorrow].name.toLowerCase()}.`, W / 2, 180, 18, '#cfd9ff', 'center', 700);
+      K.text('Your crops keep their place overnight.', W / 2, 208, 14, '#9aa6d6', 'center', 600, false);
+      if (K.t - endAt > .5 && (K.button(W / 2 - 110, 240, 220, 56, `Start day ${day + 1}`, { key: 'Enter', bg: '#7bd94a' }) || K.hit('Enter', 'Space'))) nextDay();
+    } else {
+      const sc = coins + harvested * 5;
+      K.text('That’s the season!', W / 2, 120, 46, '#fff4e0');
+      K.text(`${harvested} crops harvested · ${coins} coins · ${sc} points`, W / 2, 170, 18, '#cfd9ff', 'center', 700);
+      const best = K.best('sprout'); K.text(sc >= best ? 'New best!' : `Best ${best}`, W / 2, 200, 15, C.lemon, 'center', 700);
+      if (K.t - endAt > .6) {
+        if (K.button(W / 2 - 210, 236, 190, 56, 'New season', { key: 'Enter', bg: '#7bd94a' }) || K.hit('Enter', 'Space')) newGame();
+        if (K.button(W / 2 + 20, 236, 190, 56, 'Menu', { bg: C.cream }) || K.hit('Escape')) state = 'menu';
+      }
+    }
+  }
+}
+K.onQuit = () => { state = 'menu'; };
+K.run(update, draw);
+})();
+</script>
+</body>
+</html>

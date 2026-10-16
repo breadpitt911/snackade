@@ -1,0 +1,17 @@
+{
+  "title": "Sprout Patch",
+  "description": "A whole growing season in seven short days. Plant seeds, keep the soil wet, harvest when it's ready and sell for coins. Carrots are quick, pumpkins are worth the wait. Spend your coins on more plots, a sprinkler or a scarecrow, and watch out for the crows.",
+  "instructions": "Pick a seed on the right, then click or tap a plot to plant it. Tap again to water and to harvest. Tap crows to scare them off. Keyboard: 1 to 4 picks seeds, arrows and Space work the plots.",
+  "category": "simulation",
+  "tags": [
+    "farming",
+    "garden",
+    "chill",
+    "upgrades"
+  ],
+  "aspect": "16:9",
+  "accent": "#7bd94a",
+  "seed": 171,
+  "featured": false,
+  "order": 24
+}

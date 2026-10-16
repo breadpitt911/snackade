@@ -1,0 +1,17 @@
+{
+  "title": "Night Shift",
+  "description": "The power's gone out at the snack factory and you're not the only one on the night shift. Find five fuses in the dark and get them to the fuse box. Whatever is down there can't move while your torch is on it, but your batteries won't last forever. Contains jump scares.",
+  "instructions": "WASD or the arrow keys to walk, the mouse to point your torch. On a phone, left thumb walks and right thumb points the torch. Grab spare batteries when you see them.",
+  "category": "horror",
+  "tags": [
+    "flashlight",
+    "survival",
+    "stealth",
+    "jump scares"
+  ],
+  "aspect": "16:9",
+  "accent": "#ff3b3b",
+  "seed": 138,
+  "featured": false,
+  "order": 21
+}

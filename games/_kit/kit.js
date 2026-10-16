@@ -49,10 +49,11 @@
       if (e.repeat) { down.add(e.code); return; }
       if (e.code === 'KeyM') { K.muted = !K.muted; return; }
       if ((e.code === 'Escape' || e.code === 'KeyP') && K.playing) { K.paused = !K.paused; down.clear(); return; }
-      if (K.paused) { K.paused = false; return; }
+      if (K.paused) { if (e.code === 'KeyQ' && K.onQuit) quit(); else K.paused = false; return; }
       down.add(e.code); hit.add(e.code);
     });
     addEventListener('keyup', function (e) { down.delete(e.code); });
+    function quit() { K.paused = false; K.playing = false; ptrs.clear(); down.clear(); K.clearParts && K.clearParts(); if (K.onQuit) K.onQuit(); }
     function autoPause() { down.clear(); ptrs.clear(); if (K.playing) K.paused = true; }
     addEventListener('blur', autoPause);
     if (window.Snackbar) Snackbar.onPause(autoPause);
@@ -61,13 +62,17 @@
     K.anyHit = function () { return hit.size > 0; };
 
     // ---------- pointer / touch ----------
-    var ptrs = new Map(), taps = [], releases = [];
+    var ptrs = new Map(), taps = [], releases = [], pauseTaps = [];
+    // Touch players get a small pause button at the bottom middle while a game is running.
+    var CHIP = { w: 46, h: 30 };
+    function inPauseChip(p) { return Math.abs(p.x - W / 2) < CHIP.w / 2 + 6 && p.y > H - CHIP.h - 14; }
     K.mouse = null;
     function pos(e) { var r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H }; }
     cv.addEventListener('pointerdown', function (e) {
       e.preventDefault(); unlock();
       var p = pos(e); K.mouse = p;
-      if (K.paused) { K.paused = false; return; }
+      if (K.paused) { pauseTaps.push(p); return; }
+      if (K.touch && K.playing && inPauseChip(p)) { K.paused = true; ptrs.clear(); return; }
       ptrs.set(e.pointerId, { x: p.x, y: p.y, x0: p.x, y0: p.y, t0: K.t, id: e.pointerId });
       taps.push({ x: p.x, y: p.y, id: e.pointerId });
       try { cv.setPointerCapture(e.pointerId); } catch (_) {}
@@ -87,6 +92,19 @@
       }
       return null;
     };
+    K.swipeIn = function (zone, min) {
+      for (var i = 0; i < releases.length; i++) {
+        var r = releases[i], dx = r.x - r.x0, dy = r.y - r.y0;
+        if (r.x0 < zone.x || r.x0 > zone.x + zone.w || r.y0 < zone.y || r.y0 > zone.y + zone.h) continue;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) >= (min || 24)) return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+      }
+      return null;
+    };
+    // A quick tap (short, barely moved) that started inside the zone and ended this frame.
+    K.quickTap = function (zone) {
+      return releases.some(function (r) { return r.dt < .3 && Math.hypot(r.x - r.x0, r.y - r.y0) < 16 && r.x0 >= zone.x && r.x0 <= zone.x + zone.w && r.y0 >= zone.y && r.y0 <= zone.y + zone.h; });
+    };
+    K.LEFT = { x: 0, y: 0, w: W / 2, h: H }; K.RIGHT = { x: W / 2, y: 0, w: W / 2, h: H };
     // Virtual stick: the first pointer that started inside the zone, as {dx, dy} in -1..1, or null.
     K.stick = function (zone, radius) {
       radius = radius || 50;
@@ -228,11 +246,18 @@
         } catch (e) { if (errors++ < 3) console.error(e); }
         ctx.restore();
         if (K.paused) {
-          ctx.fillStyle = 'rgba(21,19,31,.7)'; ctx.fillRect(0, 0, W, H);
-          K.text('Paused', W / 2, H / 2 - 18, 52, K.C.cream);
-          K.text(K.touch ? 'Tap to keep going' : 'Press any key or click to keep going', W / 2, H / 2 + 30, 18, K.C.lemon, 'center', 700);
+          ctx.fillStyle = 'rgba(21,19,31,.78)'; ctx.fillRect(0, 0, W, H);
+          K.text('Paused', W / 2, H / 2 - 70, 50, K.C.cream);
+          var saved = taps; taps = pauseTaps;
+          var bw = Math.min(220, W * .42), y = H / 2 - 22;
+          if (K.button(W / 2 - bw / 2, y, bw, 52, 'Keep playing', { key: K.touch ? '' : 'Enter' })) K.paused = false;
+          if (K.onQuit && K.button(W / 2 - bw / 2, y + 66, bw, 52, 'Quit to menu', { bg: K.C.cream, key: K.touch ? '' : 'Q' })) quit();
+          taps = saved; pauseTaps = [];
+        } else if (K.touch && K.playing) {
+          ctx.globalAlpha = .55; ctx.fillStyle = 'rgba(21,19,31,.8)'; K.rr(W / 2 - CHIP.w / 2, H - CHIP.h - 8, CHIP.w, CHIP.h, 10); ctx.fill();
+          ctx.fillStyle = '#fff4e0'; ctx.fillRect(W / 2 - 6, H - CHIP.h + 1, 4, 12); ctx.fillRect(W / 2 + 2, H - CHIP.h + 1, 4, 12); ctx.globalAlpha = 1;
         }
-        hit.clear(); taps = []; releases = [];
+        hit.clear(); taps = []; releases = []; pauseTaps = [];
       }
       requestAnimationFrame(frame);
       if (window.Snackbar) Snackbar.ready();

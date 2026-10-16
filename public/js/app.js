@@ -1,3 +1,4 @@
+import { skeleton } from './skeleton.js';
 import { state, api, setMe, onMeChange, setRouter, go, esc, icon, logo, levelRing, avatarHtml, fmt, $ } from './core.js';
 
 const ROUTES = [
@@ -61,16 +62,6 @@ const progress = (() => {
     done() { el.className = performance.now() - t0 > 150 ? 'done' : ''; },
   };
 })();
-const skCards = n => `<div class="shelf">${'<div class="sk-card"><div class="sk sk-img"></div><div class="sk sk-line"></div><div class="sk sk-line short"></div></div>'.repeat(n)}</div>`;
-function skeleton(path) {
-  const head = '<div class="sk sk-line big"></div><div class="sk sk-line" style="width:min(520px,80%)"></div><div style="height:26px"></div>';
-  if (path.startsWith('/game/')) return `<div class="wrap sk-wrap" aria-busy="true" aria-label="Loading"><div class="game-layout"><div><div class="sk sk-stage"></div>
-    <div style="height:22px"></div><div class="sk sk-line big"></div><div class="sk sk-line"></div><div class="sk sk-line short"></div></div>
-    <aside class="side"><div class="sk sk-panel"></div><div class="sk sk-panel"></div></aside></div></div>`;
-  if (/^\/(admin|settings|upload|login|signup|terms|privacy)/.test(path)) return `<div class="wrap sk-wrap" aria-busy="true" aria-label="Loading">${head}<div class="sk sk-panel"></div><div style="height:14px"></div><div class="sk sk-panel short"></div></div>`;
-  return `<div class="wrap sk-wrap" aria-busy="true" aria-label="Loading">${head}${skCards(path === '/' ? 5 : 10)}</div>`;
-}
-
 function notFound(msg) {
   document.title = `Not found · ${state.meta.siteName}`;
   main.innerHTML = `<div class="wrap empty" style="padding:80px 20px">${logo(90)}<h1 style="font-size:3rem">Nothing on this shelf</h1>
@@ -134,12 +125,17 @@ function renderFooter() {
 }
 function applyTheme(t) {
   document.documentElement.dataset.themeChoice = t;
+  // A preference cookie so the next page load starts in the right colours (no flash).
+  document.cookie = t === 'auto' ? 'theme=; Max-Age=0; Path=/; SameSite=Lax' : `theme=${t}; Max-Age=31536000; Path=/; SameSite=Lax${location.protocol === 'https:' ? '; Secure' : ''}`;
   if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = t;
 }
 
 // ---------- boot ----------
 (async function boot() {
-  const [meta, me] = await Promise.all([api('/meta'), api('/me').catch(() => ({ user: null }))]);
+  // Site settings ride along in the HTML; only fall back to a request if they're missing.
+  let embedded = null;
+  try { embedded = JSON.parse(document.getElementById('boot-meta')?.textContent || 'null'); } catch { /* fall through */ }
+  const [meta, me] = await Promise.all([embedded || api('/meta'), api('/me').catch(() => ({ user: null }))]);
   state.meta = meta; state.me = me.user;
   renderTopbar(); renderFooter();
   onMeChange(renderTopbar);
